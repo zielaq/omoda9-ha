@@ -45,6 +45,7 @@ from .const import (
     CONF_POLL_NORMAL, CONF_POLL_CHARGING,
     DEFAULT_POLL_NORMAL_MIN, DEFAULT_POLL_CHARGING_MIN,
     CONF_VEHICLE_NAME,
+    CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -933,6 +934,13 @@ class Omoda9OptionsFlow(config_entries.OptionsFlow):
                 CONF_POLL_CHARGING,
                 default=opt.get(CONF_POLL_CHARGING, DEFAULT_POLL_CHARGING_MIN),
             ): vol.All(vol.Coerce(int), vol.Range(min=0, max=1440)),
+            # chargeAppointQuery: una richiesta IN PIÙ verso il cloud del costruttore,
+            # oltre alla telemetria push che arriva comunque via MQTT (vedi CONF_READ_CHARGE_PLAN
+            # in const.py). Default ON, ma spegnibile da chi preferisce zero chiamate extra.
+            vol.Optional(
+                CONF_READ_CHARGE_PLAN,
+                default=opt.get(CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN),
+            ): bool,
             # override manuale del nome del veicolo (vuoto = usa quello rilevato dall'auto)
             vol.Optional(
                 CONF_VEHICLE_NAME,

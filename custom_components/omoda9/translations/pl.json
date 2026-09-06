@@ -1,0 +1,550 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Omoda 9 / Jaecoo",
+        "description": "Wybierz sposób logowania do konta Omoda/Jaecoo. Użyj opcji telefonu, jeśli konto jest zarejestrowane na numer telefonu zamiast adresu e-mail.",
+        "menu_options": {
+          "login_email": "Zaloguj przez e-mail",
+          "login_phone": "Zaloguj przez numer telefonu (SMS)",
+          "login_password": "Zaloguj hasłem (bez kodu)"
+        }
+      },
+      "login_email": {
+        "title": "Logowanie e-mailem",
+        "description": "Podaj e-mail konta Omoda/Jaecoo oraz PIN sterowania pojazdem. Kod OTP zostanie wysłany na e-mail; VIN i identyfikator konta zostaną wykryte automatycznie.{reason}",
+        "data": {
+          "preset": "Marka / region (szablon)",
+          "email": "E-mail konta",
+          "pin": "PIN sterowania pojazdem",
+          "language": "Język (e-maile OTP / SMS)",
+          "bff": "Adres BFF (region)",
+          "tenant_code": "Kod dzierżawcy (zaawansowane)",
+          "country_id": "ID kraju (zaawansowane)",
+          "tsp_host": "Host konsoli TSP (region)",
+          "car_mqtt_host": "Host brokera MQTT pojazdu (region)",
+          "car_mqtt_port": "Port brokera MQTT pojazdu (region)",
+          "channel_id": "ID kanału (region)",
+          "certs_src": "Folder z certyfikatami mutual-TLS do zaimportowania (opcjonalnie)"
+        },
+        "data_description": {
+          "preset": "Omoda/Jaecoo (Europa) i Chery (Europa) wypełniają wszystko automatycznie. Wybierz Niestandardowy, żeby ręcznie ustawić adres BFF, kod dzierżawcy, ID kraju/kanału, host MQTT i certyfikaty dla innego regionu lub marki."
+        }
+      },
+      "login_phone": {
+        "title": "Logowanie telefonem (SMS)",
+        "description": "Podaj numer telefonu zarejestrowany na koncie Omoda/Jaecoo, jego kod kraju (Włochy = 39, bez plusa) oraz PIN sterowania pojazdem. Kod weryfikacyjny zostanie wysłany SMS-em; VIN i identyfikator konta zostaną wykryte automatycznie.{reason}",
+        "data": {
+          "preset": "Marka / region (szablon)",
+          "phone": "Numer telefonu (bez kodu kraju)",
+          "area_code": "Kod kraju w cyfrach (np. 39)",
+          "pin": "PIN sterowania pojazdem",
+          "language": "Język (e-maile OTP / SMS)",
+          "bff": "Adres BFF (region)",
+          "tenant_code": "Kod dzierżawcy (zaawansowane)",
+          "country_id": "ID kraju (zaawansowane)",
+          "tsp_host": "Host konsoli TSP (region)",
+          "car_mqtt_host": "Host brokera MQTT pojazdu (region)",
+          "car_mqtt_port": "Port brokera MQTT pojazdu (region)",
+          "channel_id": "ID kanału (region)",
+          "certs_src": "Folder z certyfikatami mutual-TLS do zaimportowania (opcjonalnie)"
+        },
+        "data_description": {
+          "preset": "Omoda/Jaecoo (Europa) i Chery (Europa) wypełniają wszystko automatycznie. Wybierz Niestandardowy, żeby ręcznie ustawić adres BFF, kod dzierżawcy, ID kraju/kanału, host MQTT i certyfikaty dla innego regionu lub marki."
+        }
+      },
+      "otp": {
+        "title": "Kod weryfikacyjny",
+        "description": "Podaj otrzymany kod OTP (e-mailem lub SMS-em).{reason}",
+        "data": {
+          "code": "Kod OTP"
+        }
+      },
+      "select_vehicle": {
+        "title": "Wybierz pojazd",
+        "description": "Na tym koncie jest więcej niż jeden pojazd. Wybierz VIN do dodania.",
+        "data": {
+          "vin": "Pojazd (VIN)"
+        }
+      },
+      "reconfigure": {
+        "title": "Zmień ustawienia",
+        "description": "Co chcesz poprawić? Każda opcja pyta tylko o to, co zmienia: zmiana sposobu odbioru kodu nie zapyta o PIN.",
+        "menu_options": {
+          "reconfigure_pin": "PIN sterowania pojazdem",
+          "reconfigure_email": "Odbieraj kod e-mailem",
+          "reconfigure_phone": "Odbieraj kod SMS-em"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Ponowne uwierzytelnienie Omoda 9 / Jaecoo",
+        "description": "Sesja wygasła: dopóki nie zalogujesz się ponownie, integracja nie może komunikować się z autem, a komendy i czujniki pozostają zamrożone.\n\n**Żaden kod nie został wysłany automatycznie.** Wybierz „Wyślij mi nowy kod”, aby otrzymać świeży kod na {email}.{reason}",
+        "menu_options": {
+          "send_code": "Wyślij mi nowy kod",
+          "enter_code": "Mam już ważny kod",
+          "install_fallback": "Zainstaluj zapasowego klienta TLS (pobranie, ok. 12 MB)"
+        }
+      },
+      "enter_code": {
+        "title": "Podaj kod weryfikacyjny",
+        "description": "Podaj kod właśnie wysłany na {email}. Kody wygasają po kilku minutach: jeśli zostanie odrzucony, możesz cofnąć się i poprosić o nowy.{reason}",
+        "data": {
+          "code": "Kod OTP"
+        }
+      },
+      "reconfigure_pin": {
+        "title": "PIN sterowania pojazdem",
+        "description": "Podaj 4-cyfrowy PIN używany do komend zdalnych. PIN nie służy do logowania, więc kod weryfikacyjny nie jest tu potrzebny. Popraw go, jeśli komendy wracają jako „wykonane”, ale auto nic nie robi.",
+        "data": {
+          "pin": "PIN sterowania pojazdem"
+        }
+      },
+      "reconfigure_email": {
+        "title": "Odbieraj kod e-mailem",
+        "description": "Od teraz kod weryfikacyjny będzie wysyłany na ten adres. Użyj tej opcji, jeśli konto jest zarejestrowane na adres e-mail, albo żeby poprawić literówkę.\n\nBieżąca sesja pozostaje ważna: zmienia się tylko trasa kolejnego kodu.",
+        "data": {
+          "email": "E-mail konta"
+        }
+      },
+      "reconfigure_phone": {
+        "title": "Odbieraj kod SMS-em",
+        "description": "Od teraz kod weryfikacyjny będzie wysyłany na ten numer. Podaj numer bez kodu kraju, a kod kraju osobno, samymi cyframi (Włochy = 39, bez plusa).\n\nBieżąca sesja pozostaje ważna: zmienia się tylko trasa kolejnego kodu. Jeśli numer nie jest tym zarejestrowanym na koncie Omoda/Jaecoo, SMS nie dotrze: możesz z tego samego menu wrócić do e-maila.",
+        "data": {
+          "phone": "Numer telefonu (bez kodu kraju)",
+          "area_code": "Kod kraju, same cyfry (Włochy = 39)"
+        }
+      },
+      "login_password": {
+        "title": "Logowanie hasłem",
+        "description": "Podaj e-mail konta, hasło i PIN sterowania pojazdem: kod OTP nie jest potrzebny. VIN i identyfikator konta zostaną wykryte automatycznie. Hasło jest użyte jednorazowo do zalogowania i nigdy nie jest zapisywane.{reason}",
+        "data": {
+          "email": "E-mail konta",
+          "pin": "PIN sterowania pojazdem",
+          "password": "Hasło konta",
+          "bff": "Adres BFF (region)",
+          "tsp_host": "Host konsoli TSP (region)",
+          "car_mqtt_host": "Host brokera MQTT pojazdu (region)",
+          "car_mqtt_port": "Port brokera MQTT pojazdu (region)",
+          "channel_id": "ID kanału (region)",
+          "certs_src": "Folder z certyfikatami mutual-TLS do zaimportowania (opcjonalnie)"
+        }
+      },
+      "reauth_password": {
+        "title": "Podaj hasło ponownie",
+        "description": "Sesja wygasła. Podaj hasło konta dla {email}, żeby zalogować się ponownie: kod nie jest potrzebny.{reason}",
+        "data": {
+          "password": "Hasło konta"
+        }
+      }
+    },
+    "error": {
+      "otp_send_failed": "Nie udało się wysłać kodu. Sprawdź e-mail/telefon i PIN, i spróbuj ponownie.",
+      "otp_invalid": "Nieprawidłowy lub wygasły kod OTP.",
+      "no_vehicle": "Zalogowano, ale to konto nie ma żadnych pojazdów. Jeśli Twoje auto jest zarejestrowane na innym loginie (np. innym adresie e-mail), zaloguj się na ten.",
+      "pin_required": "Podaj PIN sterowania pojazdem.",
+      "otp_required": "Podaj otrzymany kod.",
+      "phone_invalid": "Ten numer telefonu wygląda nieprawidłowo. Podaj same cyfry numeru, bez kodu kraju i bez spacji; w drugim polu podaj tylko cyfry kodu kraju (Włochy = 39).",
+      "email_invalid": "Ten adres e-mail wygląda nieprawidłowo.",
+      "password_invalid": "Nieprawidłowa nazwa użytkownika lub hasło.",
+      "password_required": "Podaj hasło konta."
+    },
+    "abort": {
+      "already_configured": "Ten pojazd (VIN) jest już skonfigurowany.",
+      "token_move_failed": "Nie udało się zapisać tokenu uwierzytelniania. Sprawdź uprawnienia folderu konfiguracyjnego Home Assistant i spróbuj ponownie.",
+      "reconfigure_no_entry": "Nie znaleziono integracji: uruchom ponownie Home Assistant i spróbuj ponownie.",
+      "reconfigure_successful": "PIN zaktualizowany. Integracja została przeładowana.",
+      "reauth_no_entry": "Nie znaleziono integracji: uruchom ponownie Home Assistant i spróbuj ponownie.",
+      "reauth_successful": "Ponowne uwierzytelnienie zakończone sukcesem. Integracja została przeładowana."
+    }
+  },
+  "issues": {
+    "pin_wrong": {
+      "title": "Omoda 9: nieprawidłowy PIN komend",
+      "fix_flow": {
+        "step": {
+          "pin": {
+            "title": "Popraw PIN sterowania pojazdem",
+            "description": "Komendy zdalne są odrzucane, bo 4-cyfrowy PIN sterowania jest nieprawidłowy (czujniki nadal działają: to nie jest problem logowania). Podaj poprawny PIN. Nie próbuj wielokrotnie z błędnym PIN-em, żeby nie zablokować konta Chery.",
+            "data": {
+              "pin": "PIN sterowania pojazdem"
+            }
+          }
+        },
+        "error": {
+          "pin_required": "Podaj PIN sterowania pojazdem."
+        },
+        "abort": {
+          "entry_not_found": "Nie znaleziono integracji: uruchom ponownie Home Assistant i spróbuj ponownie."
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Omoda 9: aktualizacje automatyczne",
+        "description": "Jak często budzić auto i odświeżać telemetrię oraz pozycję GPS. 0 = wyłączone. Interwał ładowania jest używany, gdy auto jest podłączone do ładowarki (telemetria odświeża się częściej, żeby śledzić ładowanie).",
+        "data": {
+          "poll_normal_min": "Interwał aktualizacji, gdy zaparkowane (minuty, 0 = wyłączone)",
+          "poll_charging_min": "Interwał aktualizacji podczas ładowania (minuty, 0 = wyłączone)",
+          "read_charge_plan": "Odczytuj plan ładowania programowanego z chmury producenta (dodatkowe zapytanie, domyślnie włączone)",
+          "vehicle_name": "Nazwa pojazdu (puste = użyj nazwy wykrytej z auta)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "a_casa": {
+        "name": "W domu"
+      },
+      "alta_tensione_attiva": {
+        "name": "Wysokie napięcie aktywne"
+      },
+      "auto_sveglia": {
+        "name": "Auto obudzone"
+      },
+      "avviso_carburante_basso": {
+        "name": "Ostrzeżenie o niskim poziomie paliwa"
+      },
+      "avviso_gomma_ant_dx": {
+        "name": "Ostrzeżenie opony przód prawy"
+      },
+      "avviso_gomma_ant_sx": {
+        "name": "Ostrzeżenie opony przód lewy"
+      },
+      "avviso_gomma_post_dx": {
+        "name": "Ostrzeżenie opony tył prawy"
+      },
+      "avviso_gomma_post_sx": {
+        "name": "Ostrzeżenie opony tył lewy"
+      },
+      "avviso_ricarica_necessaria": {
+        "name": "Ostrzeżenie o konieczności ładowania"
+      },
+      "batteria_scarica": {
+        "name": "Niski poziom baterii"
+      },
+      "cofano": {
+        "name": "Maska"
+      },
+      "connessa": {
+        "name": "Połączenie"
+      },
+      "finestrino_anteriore_dx": {
+        "name": "Szyba przednia prawa"
+      },
+      "finestrino_anteriore_sx": {
+        "name": "Szyba przednia lewa"
+      },
+      "finestrino_posteriore_dx": {
+        "name": "Szyba tylna prawa"
+      },
+      "finestrino_posteriore_sx": {
+        "name": "Szyba tylna lewa"
+      },
+      "motore": {
+        "name": "Silnik"
+      },
+      "porta_anteriore_dx": {
+        "name": "Drzwi przednie prawe"
+      },
+      "porta_anteriore_sx": {
+        "name": "Drzwi przednie lewe"
+      },
+      "porta_posteriore_dx": {
+        "name": "Drzwi tylne prawe"
+      },
+      "porta_posteriore_sx": {
+        "name": "Drzwi tylne lewe"
+      },
+      "portellone_in_movimento": {
+        "name": "Klapa bagażnika w ruchu"
+      },
+      "purificazione_aria": {
+        "name": "Oczyszczanie powietrza"
+      },
+      "riscaldamento_parabrezza": {
+        "name": "Ogrzewanie przedniej szyby"
+      },
+      "sessione": {
+        "name": "Sesja"
+      },
+      "spina_ricarica": {
+        "name": "Kabel ładowania"
+      },
+      "tendina_tetto": {
+        "name": "Roleta dachu panoramicznego"
+      }
+    },
+    "button": {
+      "aggiorna_posizione": {
+        "name": "Odśwież pozycję"
+      },
+      "aggiorna_stato_completo": {
+        "name": "Odśwież pełny stan"
+      },
+      "antifurto_off": {
+        "name": "Alarm wyłączony"
+      },
+      "antifurto_on": {
+        "name": "Alarm włączony"
+      },
+      "clima_raffredda_off": {
+        "name": "Wyłącz chłodzenie wszystkiego"
+      },
+      "clima_raffredda_on": {
+        "name": "Schłodź wszystko"
+      },
+      "clima_riscalda_off": {
+        "name": "Wyłącz ogrzewanie wszystkiego"
+      },
+      "clima_riscalda_on": {
+        "name": "Ogrzej wszystko"
+      },
+      "conferma_otp": {
+        "name": "Potwierdź OTP"
+      },
+      "finestrini_ventila": {
+        "name": "Uchyl szyby"
+      },
+      "localizza": {
+        "name": "Zlokalizuj auto (GPS)"
+      },
+      "richiedi_codice_otp": {
+        "name": "Poproś o kod OTP"
+      },
+      "sveglia_auto": {
+        "name": "Obudź auto"
+      },
+      "trova_auto": {
+        "name": "Znajdź auto (mignij światłami)"
+      }
+    },
+    "climate": {
+      "clima": {
+        "name": "Klimatyzacja"
+      }
+    },
+    "cover": {
+      "baule": {
+        "name": "Bagażnik"
+      },
+      "finestrini": {
+        "name": "Szyby"
+      },
+      "tetto": {
+        "name": "Dach panoramiczny"
+      }
+    },
+    "device_tracker": {
+      "posizione": {
+        "name": "Pozycja"
+      }
+    },
+    "lock": {
+      "serratura": {
+        "name": "Zamek"
+      }
+    },
+    "number": {
+      "durata_clima": {
+        "name": "Czas trwania klimatyzacji"
+      },
+      "ricarica_durata": {
+        "name": "Czas trwania ładowania"
+      }
+    },
+    "sensor": {
+      "autonomia_benzina": {
+        "name": "Zasięg na paliwie"
+      },
+      "autonomia_benzina_miglia": {
+        "name": "Zasięg na paliwie (mile)"
+      },
+      "autonomia_elettrica": {
+        "name": "Zasięg elektryczny"
+      },
+      "autonomia_totale": {
+        "name": "Zasięg całkowity"
+      },
+      "batteria": {
+        "name": "Bateria"
+      },
+      "carburante_residuo": {
+        "name": "Pozostałe paliwo"
+      },
+      "chilometraggio_ibrido": {
+        "name": "Przebieg hybrydowy"
+      },
+      "consumo_medio_carburante": {
+        "name": "Średnie zużycie paliwa"
+      },
+      "consumo_medio_elettrico": {
+        "name": "Średnie zużycie energii"
+      },
+      "corrente_batteria_hv": {
+        "name": "Prąd baterii wysokiego napięcia"
+      },
+      "dati_auto_aggiornati": {
+        "name": "Dane auta zaktualizowane"
+      },
+      "energia_ricarica_a_casa": {
+        "name": "Energia ładowania w domu"
+      },
+      "energia_ricarica_fuori_casa": {
+        "name": "Energia ładowania poza domem"
+      },
+      "esito_comando": {
+        "name": "Wynik komendy"
+      },
+      "esito_sonda_posizione": {
+        "name": "Wynik sondy pozycji"
+      },
+      "esito_sveglia": {
+        "name": "Wynik pobudki"
+      },
+      "odometro": {
+        "name": "Licznik przebiegu"
+      },
+      "partenza_programmata": {
+        "name": "Zaplanowany wyjazd"
+      },
+      "presa_ricarica_rapida": {
+        "name": "Gniazdo szybkiego ładowania"
+      },
+      "pressione_gomma_ant_dx": {
+        "name": "Ciśnienie opony przód prawy"
+      },
+      "pressione_gomma_ant_sx": {
+        "name": "Ciśnienie opony przód lewy"
+      },
+      "pressione_gomma_post_dx": {
+        "name": "Ciśnienie opony tył prawy"
+      },
+      "pressione_gomma_post_sx": {
+        "name": "Ciśnienie opony tył lewy"
+      },
+      "ricarica_programmata_stato": {
+        "name": "Stan ładowania programowanego"
+      },
+      "riscaldamento_sedile_post_centrale": {
+        "name": "Ogrzewanie środkowego fotela tylnego"
+      },
+      "stato_ricarica": {
+        "name": "Stan ładowania"
+      },
+      "stato_sessione": {
+        "name": "Stan sesji"
+      },
+      "temperatura_gomma_ant_dx": {
+        "name": "Temperatura opony przód prawy"
+      },
+      "temperatura_gomma_ant_sx": {
+        "name": "Temperatura opony przód lewy"
+      },
+      "temperatura_gomma_post_dx": {
+        "name": "Temperatura opony tył prawy"
+      },
+      "temperatura_gomma_post_sx": {
+        "name": "Temperatura opony tył lewy"
+      },
+      "temperatura_impostata_dx": {
+        "name": "Ustawiona temperatura, strona prawa"
+      },
+      "temperatura_impostata_sx": {
+        "name": "Ustawiona temperatura, strona lewa"
+      },
+      "tempo_di_ricarica_residuo": {
+        "name": "Pozostały czas ładowania"
+      },
+      "tensione_batteria_hv": {
+        "name": "Napięcie baterii wysokiego napięcia"
+      },
+      "tetto_stato_movimento": {
+        "name": "Stan ruchu dachu panoramicznego"
+      },
+      "ultima_posizione": {
+        "name": "Ostatnia pozycja"
+      },
+      "ultima_sveglia": {
+        "name": "Ostatnia pobudka"
+      },
+      "ultimo_contatto": {
+        "name": "Ostatni kontakt"
+      },
+      "velocita": {
+        "name": "Prędkość"
+      },
+      "ventilazione_sedile_post_centrale": {
+        "name": "Wentylacja środkowego fotela tylnego"
+      }
+    },
+    "switch": {
+      "aggiornamento_automatico": {
+        "name": "Aktualizacje automatyczne"
+      },
+      "antifurto": {
+        "name": "Alarm"
+      },
+      "disappannamento_parabrezza": {
+        "name": "Odparowywanie przedniej szyby"
+      },
+      "raffredda_tutto": {
+        "name": "Schłodź wszystko"
+      },
+      "ricarica": {
+        "name": "Ładowanie"
+      },
+      "ricarica_programmata": {
+        "name": "Ładowanie programowane"
+      },
+      "riscalda_tutto": {
+        "name": "Ogrzej wszystko"
+      },
+      "riscaldamento_lunotto": {
+        "name": "Ogrzewanie tylnej szyby"
+      },
+      "riscaldamento_sedile_guida": {
+        "name": "Ogrzewanie fotela kierowcy"
+      },
+      "riscaldamento_sedile_passeggero": {
+        "name": "Ogrzewanie fotela pasażera"
+      },
+      "riscaldamento_sedile_post_dx": {
+        "name": "Ogrzewanie tylnego fotela prawego"
+      },
+      "riscaldamento_sedile_post_sx": {
+        "name": "Ogrzewanie tylnego fotela lewego"
+      },
+      "riscaldamento_volante": {
+        "name": "Ogrzewanie kierownicy"
+      },
+      "sbrinamento_parabrezza": {
+        "name": "Rozmrażanie przedniej szyby"
+      },
+      "ventilazione_sedile_guida": {
+        "name": "Wentylacja fotela kierowcy"
+      },
+      "ventilazione_sedile_passeggero": {
+        "name": "Wentylacja fotela pasażera"
+      },
+      "ventilazione_sedile_post_dx": {
+        "name": "Wentylacja tylnego fotela prawego"
+      },
+      "ventilazione_sedile_post_sx": {
+        "name": "Wentylacja tylnego fotela lewego"
+      }
+    },
+    "text": {
+      "codice_otp": {
+        "name": "Kod OTP"
+      }
+    },
+    "time": {
+      "ricarica_orario_di_inizio": {
+        "name": "Godzina rozpoczęcia ładowania"
+      }
+    }
+  }
+}

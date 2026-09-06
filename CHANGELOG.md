@@ -10,6 +10,17 @@ dell'integrazione: aggiorna da **HACS → Omoda 9 / Jaecoo → Aggiorna**.
 
 ### 🇮🇹 Italiano
 
+- **«Ricarica programmata» ora legge il piano vero, non solo quello che l'auto annuncia da
+  sola.** Finora l'interruttore vedeva il piano di ricarica SOLO quando l'auto lo mandava di
+  sua iniziativa via telemetria: se lo cambiavi dal cruscotto o dall'app ufficiale, Home
+  Assistant non se ne accorgeva e continuava a mostrare il proprio piano di default (issue
+  #49). Ora, a fine di ogni ciclo di aggiornamento e subito dopo aver acceso/spento
+  l'interruttore, l'integrazione chiede al costruttore il piano attuale. È una richiesta IN
+  PIÙ verso il cloud del costruttore (non solo telemetria che arriva comunque): per questo è
+  un'opzione, attiva di default, disattivabile dalle impostazioni dell'integrazione. Verificato
+  dal vivo su un'Omoda 9 SHS (regione EU).
+- **Traduzione in polacco.** Nomi delle entità, procedura guidata di configurazione, opzioni e
+  avvisi di riparazione sono ora disponibili anche in polacco.
 - **«Autonomia benzina (miglia)» ora capisce da sola in che unità parla l'auto.** È un
   sensore di diagnostica, e finora dava per scontato che quel dato arrivasse in miglia —
   cosa vera sulla Omoda 9, ma dedotta da due sole letture di una sola macchina. Su un
@@ -26,6 +37,17 @@ dell'integrazione: aggiorna da **HACS → Omoda 9 / Jaecoo → Aggiorna**.
 
 ### 🇬🇧 English
 
+- **"Scheduled charging" now reads the real plan, not only what the car announces on its
+  own.** Until now the switch only saw the charging plan when the car pushed it on its own
+  initiative via telemetry: if you changed it from the dashboard or the official app, Home
+  Assistant never found out and kept showing its own default plan (issue #49). Now, at the
+  end of every update cycle and right after turning the switch on/off, the integration asks
+  the manufacturer for the current plan. This is an EXTRA request to the manufacturer's
+  cloud (not just telemetry that arrives anyway), so it is an option, on by default,
+  switchable off from the integration's settings. Verified live on an Omoda 9 SHS (EU
+  region).
+- **Polish translation.** Entity names, the setup wizard, options and repair notices are now
+  also available in Polish.
 - **"Petrol range (miles)" now works out for itself which unit the car is speaking.** It is
   a diagnostic sensor, and until now it assumed that reading arrived in miles — true on the
   Omoda 9, but worked out from two readings of a single car. On a model sending kilometres

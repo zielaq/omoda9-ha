@@ -289,6 +289,22 @@ DEFAULT_POLL_NORMAL_MIN = 60
 DEFAULT_POLL_CHARGING_MIN = 30
 # attesa tra la sveglia (localizza) e la lettura realtime forzata, perché l'auto torni online
 POLL_WAKE_WAIT = 25
+
+# Lettura del piano di ricarica programmata dal cloud (/asd/chargeAppointManage/chargeAppointQuery).
+# Finora `chargeAppointPlans` arrivava SOLO come telemetria push (MQTT 5A02): se l'utente
+# cambiava l'orario dall'auto o dall'app ufficiale, Home Assistant non lo scopriva mai e
+# continuava a mostrare il proprio piano di default (vedi il docstring di
+# Omoda9ScheduledChargeSwitch.extra_state_attributes in switch.py per la riserva originale:
+# quella chiamata NON si faceva di proposito, perché è traffico in più verso il cloud del
+# costruttore e andava deciso, non aggiunto di nascosto). Questa opzione è quella decisione,
+# resa esplicita e spegnibile: default ON perché risolve un problema reale (issue #49), ma chi
+# preferisce zero chiamate extra verso il backend Chery può disattivarla dalle opzioni.
+CONF_READ_CHARGE_PLAN = "read_charge_plan"
+DEFAULT_READ_CHARGE_PLAN = True
+# attesa dopo l'invio di ricarica_prog_on/off prima di rileggere il piano: il comando è
+# accettato subito dal backend, ma il piano che poi restituisce chargeAppointQuery impiega
+# qualche secondo a riflettere il cambiamento appena inviato.
+CHARGE_PLAN_READ_DELAY_S = 20
 # Alta tensione (HV) e telemetria FRESCA. Scoperta verificata dal vivo 2026-06-22: il canale
 # /asr/manager/realtime riporta odometro/SOC/tensione/corrente VERI solo quando l'alta tensione
 # è accesa (hVoltageState=1: marcia, ricarica o clima acceso); ad HV spento ritorna uno snapshot

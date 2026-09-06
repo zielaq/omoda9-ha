@@ -187,6 +187,7 @@
         "data": {
           "poll_normal_min": "Update interval when parked (minutes, 0 = off)",
           "poll_charging_min": "Update interval while plugged in (minutes, 0 = off)",
+          "read_charge_plan": "Read the scheduled charging plan from the manufacturer's cloud (extra request, on by default)",
           "vehicle_name": "Vehicle name (leave empty to use the name detected from the car)"
         }
       }

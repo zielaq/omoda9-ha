@@ -901,6 +901,41 @@ def query_theft_switch(ctx):
     return None
 
 
+def query_charge_plan(ctx):
+    """Legge il piano di ricarica programmata dal cloud (READ-ONLY,
+       /asd/chargeAppointManage/chargeAppointQuery). Stesso schema di query_theft_switch:
+       login BFF, un solo POST firmato, nessun taskId e nessun PIN (non è un comando,
+       non attua nulla sull'auto).
+
+       Verificato dal vivo il 2026-09-06 su un'Omoda 9 SHS (regione EU): la risposta porta
+       `body.chargeAppointPlans`, la STESSA struttura che il canale MQTT 5A02 consegna dentro
+       `chargeAppointPlans` (vedi switch.py, Omoda9ScheduledChargeSwitch) — con la differenza
+       che qui i valori sono già numerici (int) invece che stringhe, perché arrivano da un
+       JSON diretto e non da un envelope di telemetria. `switch.py` gestisce già entrambe le
+       forme (vedi `_live_on`, che chiama `ast.literal_eval` solo se il campo è una stringa).
+
+       Percorsi alternativi provati e risultati in HTTP 404, quindi scartati:
+       /asd/chargeAppointManage/queryChargeAppoint, /asc/vehicleControl/chargeAppointQuery,
+       /asd/chargeAppointManage/chargeAppointList.
+
+       Ritorna la lista `chargeAppointPlans` così com'è (pronta per finire in
+       `fields["chargeAppointPlans"]`) oppure None se non disponibile."""
+    token, _tuid = wake._bff_login(ctx)
+    if not token:
+        return None
+    try:
+        _status, j = wake._signed_post(ctx, token, "/asd/chargeAppointManage/chargeAppointQuery",
+                                       {"vin": ctx.vin})
+    except Exception:
+        return None
+    if isinstance(j, dict):
+        body = j.get("body") if isinstance(j.get("body"), dict) else {}
+        plans = body.get("chargeAppointPlans")
+        if isinstance(plans, list):
+            return plans
+    return None
+
+
 if __name__ == "__main__":
     # Diagnostica: elenca i comandi (NON invia nulla).
     for k, v in COMMANDS:

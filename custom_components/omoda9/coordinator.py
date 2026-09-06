@@ -39,6 +39,7 @@ from .const import (
     CONF_TENANT_CODE, CONF_COUNTRY_ID,
     CONF_POLL_NORMAL, CONF_POLL_CHARGING, DEFAULT_POLL_NORMAL_MIN,
     DEFAULT_POLL_CHARGING_MIN, POLL_WAKE_WAIT, COMMAND_SETTLE_S, COMMAND_QUEUE_WAIT,
+    CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN, CHARGE_PLAN_READ_DELAY_S,
     HV_ON_POLL_EVERY, HV_ON_POLL_MAX,
     CHARGING_POLL_EVERY, CHARGING_POLL_MAX, DRIVE_WATCH_EVERY,
     CONF_VEHICLE_NAME, DATA_VEHICLE_MODEL, DATA_VEHICLE_BRAND,
@@ -314,6 +315,9 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         opt = entry.options or {}
         self.poll_normal_min = int(opt.get(CONF_POLL_NORMAL, DEFAULT_POLL_NORMAL_MIN))
         self.poll_charging_min = int(opt.get(CONF_POLL_CHARGING, DEFAULT_POLL_CHARGING_MIN))
+        # lettura del piano di ricarica programmata dal cloud (query esplicita, non solo
+        # telemetria push): vedi CONF_READ_CHARGE_PLAN in const.py per il perché è un'opzione.
+        self.read_charge_plan = bool(opt.get(CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN))
         # Fotografia delle opzioni applicate da QUESTA istanza: l'update listener la
         # confronta con quelle correnti per capire se un aggiornamento dell'entry ha
         # davvero toccato le opzioni (→ serve un reload) oppure solo `entry.data`
@@ -711,6 +715,7 @@ class Omoda9Coordinator(DataUpdateCoordinator):
             _LOGGER.debug("[poll] lettura realtime fallita: %s", err)
         if self._online:
             _LOGGER.debug("[poll] auto online: dati già freschi, niente sveglia")
+            await self.async_read_charge_plan()
             return
         # auto offline (A07900) → una sveglia + rilettura per riportarla online
         _LOGGER.debug("[poll] auto offline: sveglio (localizza) e rileggo")
@@ -722,6 +727,9 @@ class Omoda9Coordinator(DataUpdateCoordinator):
             await self.async_probe(force=True)
         except Exception as err:  # noqa: BLE001
             _LOGGER.debug("[poll] lettura realtime fallita: %s", err)
+        # [feat/charge-plan-query] a fine ciclo, non solo quando l'auto era già online: la
+        # query del piano non dipende dal realtime appena letto.
+        await self.async_read_charge_plan()
 
     def _connect_car(self) -> None:
         # import qui (executor): a livello modulo causa un blocking-call warning nel loop.
@@ -1224,6 +1232,19 @@ class Omoda9Coordinator(DataUpdateCoordinator):
                 self._cmd_gate.release()
 
         self.hass.async_create_background_task(_hold_then_release(), f"{DOMAIN}_cmd_settle")
+
+        if key in ("ricarica_prog_on", "ricarica_prog_off"):
+            # Il comando è accettato, ma il piano che poi restituisce chargeAppointQuery
+            # impiega qualche secondo a riflettere il cambiamento appena inviato → si
+            # aspetta CHARGE_PLAN_READ_DELAY_S prima di rileggerlo. Task in background:
+            # non deve far attendere la UI che ha appena premuto l'interruttore.
+            async def _rileggi_piano_dopo_comando() -> None:
+                await asyncio.sleep(CHARGE_PLAN_READ_DELAY_S)
+                await self.async_read_charge_plan()
+
+            self.hass.async_create_background_task(
+                _rileggi_piano_dopo_comando(), f"{DOMAIN}_charge_plan_reread")
+
         return res
 
     def _send_command(self, key: str, params: dict | None = None) -> str:
@@ -1326,6 +1347,33 @@ class Omoda9Coordinator(DataUpdateCoordinator):
     def _query_theft(self) -> int | None:
         from .core import commands as CMD
         return CMD.query_theft_switch(self.ctx)
+
+    async def async_read_charge_plan(self) -> None:
+        """Interroga il cloud per il piano di ricarica programmata REALE e lo scrive nello
+        stesso posto da cui `switch.py` (Omoda9ScheduledChargeSwitch) già legge:
+        `fields["chargeAppointPlans"]`. Nessuna entità nuova: si aggiorna la fonte che
+        quella esistente guarda già, così l'interruttore e i suoi attributi riflettono un
+        piano impostato dall'auto o dall'app ufficiale, non solo quello che arriva via MQTT.
+
+        Spegnibile da CONF_READ_CHARGE_PLAN (opzioni): è una richiesta IN PIÙ verso il
+        cloud del costruttore, non telemetria che arriva comunque. Vedi const.py per il
+        perché è un'opzione e non un comportamento fisso."""
+        if not self.read_charge_plan:
+            return
+        plans = await self.hass.async_add_executor_job(self._read_charge_plan)
+        if plans is None:
+            return
+        # stesso schema di `_on_car_message`: si aggiorna `_fields` sotto lock e si
+        # pubblica una COPIA di tutto il dizionario, perché `_apply_update` sostituisce
+        # `data["fields"]` per intero (non fa merge chiave per chiave).
+        with self._state_lock:
+            self._fields["chargeAppointPlans"] = plans
+            fields_copy = dict(self._fields)
+        self._update({"fields": fields_copy})
+
+    def _read_charge_plan(self) -> list | None:
+        from .core import commands as CMD
+        return CMD.query_charge_plan(self.ctx)
 
     async def async_wake(self) -> None:
         await self.hass.async_add_executor_job(self._wake)

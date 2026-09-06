@@ -187,6 +187,7 @@
         "data": {
           "poll_normal_min": "Intervallo di aggiornamento da parcheggiata (minuti, 0 = off)",
           "poll_charging_min": "Intervallo di aggiornamento alla colonnina (minuti, 0 = off)",
+          "read_charge_plan": "Leggi il piano di ricarica programmata dal cloud del costruttore (richiesta in più, attiva di default)",
           "vehicle_name": "Nome del veicolo (vuoto = usa quello rilevato dall'auto)"
         }
       }
