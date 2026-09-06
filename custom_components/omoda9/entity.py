@@ -247,7 +247,16 @@ class Omoda9OptimisticMixin:
             await self.coordinator.async_send_command(key, params)
             inviato = True
         except Exception as err:  # noqa: BLE001 — qualunque fallimento del comando
-            raise HomeAssistantError(f"Comando «{key}» non riuscito: {err}") from err
+            # [Task C] `translation_key`: il meccanismo NATIVO di Home Assistant per
+            # tradurre il messaggio di un'eccezione (frontend e servizi lo risolvono da
+            # `exceptions.command_failed.message` in translations/*.json). `str(err)`
+            # resta in inglese (o non tradotto, per ciò che questa release non ha ancora
+            # convertito): è un dettaglio tecnico incorporato come placeholder, non il
+            # testo da tradurre.
+            raise HomeAssistantError(
+                translation_domain=DOMAIN, translation_key="command_failed",
+                translation_placeholders={"command": key, "error": str(err)},
+            ) from err
         finally:
             if not inviato:
                 self._clear_optimistic()

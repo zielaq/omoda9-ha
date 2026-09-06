@@ -77,7 +77,7 @@ async def test_esito_conferma_leggibile(hass, integrazione_avviata):
     await _consegna(hass, coord, FX.cmd_confirm(result="1", reason=["door_open"]))
     esito = coord.data["cmd_status"]
     assert "✅" not in esito, "un guasto non deve apparire come successo"
-    assert "in parte" in esito
+    assert "partly" in esito.lower()
 
 
 async def test_esito_parziale_nomina_i_moduli(hass, integrazione_avviata):
@@ -93,9 +93,9 @@ async def test_esito_parziale_nomina_i_moduli(hass, integrazione_avviata):
     await _consegna(hass, coord, FX.cmd_confirm(result="1", reason=reason))
 
     esito = coord.data["cmd_status"]
-    assert "clima" in esito
-    assert "sedile guida ventilato" in esito
-    assert "modulo 77" in esito, "un modulo sconosciuto si riporta grezzo, non si indovina"
+    assert "climate" in esito.lower()
+    assert "driver seat ventilation" in esito.lower()
+    assert "module 77" in esito.lower(), "un modulo sconosciuto si riporta grezzo, non si indovina"
     assert "0:11" in esito, "i codici grezzi servono alla diagnosi: non vanno persi"
     assert len(esito) <= 255, "lo stato di un sensore HA non può superare i 255 caratteri"
 
@@ -111,9 +111,9 @@ async def test_esito_nomina_il_sedile_guida_riscaldato(hass, integrazione_avviat
     await _consegna(hass, coord, FX.cmd_confirm(result="3", reason=reason))
 
     esito = coord.data["cmd_status"]
-    assert "sedile guida riscaldato" in esito
-    assert "modulo 4" not in esito
-    assert "in parte" in esito, "un sedile che non parte resta un'esecuzione parziale"
+    assert "driver seat heating" in esito.lower()
+    assert "module 4" not in esito.lower()
+    assert "partly" in esito.lower(), "un sedile che non parte resta un'esecuzione parziale"
 
 
 async def test_solo_il_clima_non_e_un_guasto(hass, integrazione_avviata):
@@ -128,14 +128,14 @@ async def test_solo_il_clima_non_e_un_guasto(hass, integrazione_avviata):
                     FX.cmd_confirm(result="3", reason=[{"code": "95", "modelId": "0"}]))
 
     esito = coord.data["cmd_status"]
-    assert "in parte" not in esito, "il solo clima non è un'esecuzione parziale"
+    assert "partly" not in esito.lower(), "il solo clima non è un'esecuzione parziale"
     assert "⚠️" not in esito
     assert "0:95" in esito, "il codice grezzo resta: serve alla diagnosi"
 
     # ma basta UN modulo vero accanto perché torni l'avviso
     await _consegna(hass, coord, FX.cmd_confirm(
         result="3", reason=[{"code": "95", "modelId": "0"}, {"code": "1", "modelId": "9"}]))
-    assert "in parte" in coord.data["cmd_status"]
+    assert "partly" in coord.data["cmd_status"].lower()
 
 
 async def test_esito_parziale_regge_un_reason_deforme(hass, integrazione_avviata):

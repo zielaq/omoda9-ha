@@ -10,6 +10,26 @@ dell'integrazione: aggiorna da **HACS → Omoda 9 / Jaecoo → Aggiorna**.
 
 ### 🇮🇹 Italiano
 
+- **Un riavvio di Home Assistant non finge più che un comando sia partito, se non è mai
+  partito.** Incidente reale (2026-09-06): premuto «Raffredda tutto», Home Assistant
+  riavviato 33 secondi dopo, mentre l'interruttore stava ancora aspettando che l'auto si
+  svegliasse — il comando vero non era mai uscito verso l'auto. Al riavvio l'interruttore è
+  tornato ON comunque, e ci è rimasto 3 minuti e mezzo prima che la telemetria lo smentisse.
+  Ora ogni interruttore/serratura/apertura ricorda, insieme al proprio stato, se quello stato
+  era CONFERMATO dalla telemetria (o da una lettura equivalente) oppure era ancora solo
+  un'intenzione: un valore mai confermato torna sconosciuto dopo il riavvio, mai acceso.
+  Finché un valore non è confermato, l'interfaccia lo dice anche in un altro modo:
+  `assumed_state`, il meccanismo nativo di Home Assistant, disegna il controllo con due
+  pulsanti separati invece di un interruttore unico.
+- **I comandi ora "pensano" in inglese e Home Assistant traduce.** Finora i testi di «Esito
+  comando», «Esito sveglia» e «Stato sessione» erano scritti direttamente in italiano nel
+  cuore del protocollo, che non sa nulla della lingua di chi guarda lo schermo. Ora quel
+  livello produce un codice di evento stabile più i suoi parametri (il comando, i codici del
+  backend, i secondi d'attesa…), e Home Assistant lo traduce nella lingua configurata usando
+  il proprio meccanismo di traduzione — lo stesso di nomi di entità e menu. Tradotto anche in
+  polacco. Alcuni messaggi diagnostici più interni (gli avvisi sui permessi del veicolo, il
+  dettaglio grezzo di un rifiuto PIN) restano per ora in italiano: sono elencati nella pull
+  request come lavoro futuro.
 - **«Ricarica programmata» ora legge il piano vero, non solo quello che l'auto annuncia da
   sola.** Finora l'interruttore vedeva il piano di ricarica SOLO quando l'auto lo mandava di
   sua iniziativa via telemetria: se lo cambiavi dal cruscotto o dall'app ufficiale, Home
@@ -37,6 +57,25 @@ dell'integrazione: aggiorna da **HACS → Omoda 9 / Jaecoo → Aggiorna**.
 
 ### 🇬🇧 English
 
+- **A Home Assistant restart no longer pretends a command went out if it never did.** Real
+  incident (2026-09-06): "Cool everything" was pressed, Home Assistant restarted 33 seconds
+  later while the switch was still waiting for the car to wake up — the real command had
+  never left for the car. On restart the switch came back ON anyway, and stayed wrong for
+  3.5 minutes until telemetry corrected it. Every switch/lock/cover now remembers, alongside
+  its own state, whether that state was CONFIRMED by telemetry (or an equivalent read) or
+  was still only an intention: a value that was never confirmed comes back unknown after a
+  restart, never on. While a value is unconfirmed, the interface also says so another way:
+  `assumed_state`, Home Assistant's native mechanism, draws the control as two separate
+  buttons instead of a single switch.
+- **Commands now "think" in English and Home Assistant translates.** Until now the text of
+  "Command result", "Wake-up result" and "Session status" was written directly in Italian in
+  the protocol core, which knows nothing about the language of whoever is looking at the
+  screen. That layer now produces a stable event code plus its parameters (the command,
+  backend codes, wait seconds…), and Home Assistant translates it into the configured
+  language using its own translation mechanism — the same one used for entity names and
+  menus. Also translated into Polish. Some more internal diagnostic messages (vehicle
+  permission warnings, the raw detail of a PIN rejection) remain in Italian for now: they are
+  listed in the pull request as future work.
 - **"Scheduled charging" now reads the real plan, not only what the car announces on its
   own.** Until now the switch only saw the charging plan when the car pushed it on its own
   initiative via telemetry: if you changed it from the dashboard or the official app, Home

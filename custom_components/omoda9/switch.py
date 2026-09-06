@@ -33,6 +33,8 @@ from homeassistant.util import dt as dt_util
 from .const import (CAMPO_CLIMA, DOMAIN, MACRO_GRAZIA_S, MACRO_WAKE_WAIT,
                     MACRO_WAKE_WAIT_AWAKE, MACRO_PRESET_S)
 from .entity import Omoda9Entity, Omoda9OptimisticMixin, field_on
+from .core import events as EV
+from .core.events import Esito
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
@@ -484,12 +486,16 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
         È la parte che mancava: per ~35 secondi l'interfaccia non dava alcun segno di vita
         (a differenza di ogni altro comando, che scrive i suoi passaggi su «Esito comando»),
         e il silenzio faceva ripremere il tasto — cioè l'innesco della corsa fra due cicli.
-        Testo corto e bilingue di proposito: finisce nello stato di
-        `sensor.omoda9_esito_comando`, che Home Assistant tronca a 255 caratteri."""
+
+        [Task C] Prima era un testo bilingue scritto a mano (italiano · inglese, sempre
+        entrambi): ora è un `Esito` tradotto come tutto il resto, con lo stesso catalogo già
+        in memoria sul coordinator (`_catalogo_esiti`) — nessun await qui dentro, questo
+        metodo gira sul loop ma non è async."""
         s = int(secondi)
-        self.coordinator._update({
-            "cmd_status": f"Sveglio l'auto: il comando parte fra ~{s} s · "
-                          f"Waking the car: command goes out in ~{s} s"})
+        esito = Esito(EV.WAKING_CAR_COUNTDOWN, {"seconds": s},
+                      f"Waking the car: command goes out in ~{s} s")
+        testo = self.coordinator._traduci_esito(esito, self.coordinator._catalogo_esiti)
+        self.coordinator._update({"cmd_status": testo})
 
     @callback
     def _set_state(self, value: bool, *, confirmed: bool = False) -> None:
@@ -556,7 +562,11 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
             try:
                 await self.coordinator.async_send_command(cmd)
             except Exception as err:  # noqa: BLE001
-                raise HomeAssistantError(f"Comando «{cmd}» non riuscito: {err}") from err
+                # [Task C] vedi entity.py `_run_command`: stesso `translation_key` nativo di HA.
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN, translation_key="command_failed",
+                    translation_placeholders={"command": cmd, "error": str(err)},
+                ) from err
             spedito = True
             # Da qui parte la finestra in cui la telemetria non viene creduta: l'auto continua
             # a pubblicare lo stato di PRIMA finché non esegue (vedi `_spento_dall_auto`).

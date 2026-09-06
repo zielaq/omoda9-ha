@@ -28,6 +28,8 @@ import requests
 from . import omoda_auth as A
 from . import tsp_sign as S
 from . import codes
+from . import events as EV
+from .events import Esito
 
 # P2-6: VIN, TSP_HOST e il path del token NON sono più global di modulo riscritti prima
 # di ogni chiamata: arrivano dal `CoreCtx` del veicolo (primo argomento di ogni funzione).
@@ -294,12 +296,13 @@ def do_wake(ctx, publish, is_awake=None, send_sms=True):
     """
     # lock PER VEICOLO: due auto possono svegliarsi in parallelo, la stessa no.
     if not ctx.stato.lock_sveglia.acquire(blocking=False):
-        publish("⏳ Sveglia già in corso, attendi…")
+        publish(Esito(EV.WAKE_BUSY, {}, "⏳ Wake-up already in progress, please wait…"))
         return {"ok": False, "reason": "busy"}
     try:
         return _do_wake_inner(ctx, publish, is_awake, send_sms)
     except Exception as e:
-        publish(f"⚠️ Errore sveglia: {type(e).__name__}: {e}")
+        publish(Esito(EV.WAKE_ERROR, {"error_type": type(e).__name__, "error": str(e)},
+                      f"⚠️ Wake-up error: {type(e).__name__}: {e}"))
         return {"ok": False, "reason": "exception", "error": str(e)}
     finally:
         ctx.stato.lock_sveglia.release()
@@ -314,19 +317,23 @@ def _do_wake_inner(ctx, publish, is_awake, send_sms):
         wait = COOLDOWN_S - (now - last)
         if last and wait > 0:
             mm, ss = divmod(int(wait), 60)
-            publish(f"⏳ Anti rate-limit: aspetta ancora {mm}m{ss:02d}s prima di risvegliare di nuovo")
+            publish(Esito(EV.WAKE_COOLDOWN, {"minutes": mm, "seconds": ss},
+                          f"⏳ Anti rate-limit: wait another {mm}m{ss:02d}s before waking "
+                          "it up again"))
             return {"ok": False, "reason": "cooldown", "wait_s": int(wait)}
 
     # se l'auto sta già pubblicando su MQTT, è già sveglia: niente SMS
     if is_awake and is_awake():
-        publish("🟢 Auto già sveglia (sta inviando dati) — sveglia non necessaria")
+        publish(Esito(EV.WAKE_ALREADY_AWAKE, {},
+                      "🟢 Car already awake (sending data) — wake-up not needed"))
         return {"ok": True, "online": True, "reason": "already_awake"}
 
     # 1) login BFF → userToken
-    publish("🔑 Accesso in corso…")
+    publish(Esito(EV.WAKE_LOGGING_IN, {}, "🔑 Signing in…"))
     ut, tu = _bff_login(ctx)
     if not ut:
-        publish("🔑 Sessione scaduta (token vecchio o app ufficiale aperta): rifai il login OTP")
+        publish(Esito(EV.WAKE_SESSION_EXPIRED, {},
+                      "🔑 Session expired (old token or official app open): redo the OTP login"))
         return {"ok": False, "reason": "no_usertoken"}
 
     # 2) smsAwaken (una sola volta)
@@ -336,32 +343,43 @@ def _do_wake_inner(ctx, publish, is_awake, send_sms):
         code = _code_of(j)
         _save_last_sms(ctx, time.time())     # registra SUBITO per il cooldown, anche se in errore
         if str(code) in ("000000", "A00079"):
-            publish("✅ Sveglia inviata — attendo che l'auto si connetta…")
+            publish(Esito(EV.WAKE_SENT, {}, "✅ Wake-up sent — waiting for the car to connect…"))
         elif str(code) == "A07312":
-            publish("🚫 Rate-limit sveglia (A07312): l'auto rifiuta altre sveglie ora. Riprova più tardi")
+            publish(Esito(EV.WAKE_RATE_LIMITED, {},
+                          "🚫 Wake-up rate-limit (A07312): the car is refusing further "
+                          "wake-ups now. Try again later"))
             return {"ok": False, "online": False, "code": code, "reason": "rate_limit"}
         else:
-            publish(f"⚠️ Sveglia non accettata ({code}: {codes.meaning(code)}). Provo comunque ad ascoltare…")
+            meaning_txt = codes.meaning(code)
+            publish(Esito(EV.WAKE_NOT_ACCEPTED, {"code": code or "", "meaning_key": code,
+                                                 "meaning": meaning_txt},
+                          f"⚠️ Wake-up not accepted ({code}: {meaning_txt}). "
+                          "Listening anyway…"))
     else:
-        publish("🧪 (test) smsAwaken NON inviato; passo solo al poll")
+        publish(Esito(EV.WAKE_TEST_SKIPPED, {},
+                      "🧪 (test) smsAwaken NOT sent; going straight to polling"))
 
     # 3) poll realtime/location + ascolto MQTT, per ~POLL_N*POLL_EVERY secondi
     for i in range(POLL_N):
         if is_awake and is_awake():
-            publish("🟢 Auto ONLINE — sta inviando dati in tempo reale")
+            publish(Esito(EV.WAKE_ONLINE_MQTT, {},
+                          "🟢 Car ONLINE — sending real-time data"))
             return {"ok": True, "online": True, "code": code, "via": "mqtt"}
         sc1, j1 = _signed_post(ctx, ut, "/asr/manager/realtime", {"vin": ctx.vin})
         sc2, j2 = _signed_post(ctx, ut, "/asc/vehicleControl/queryVehicleLocation",
                                {"vin": ctx.vin})
         if _has_live_data(j1) or _has_live_data(j2):
-            publish("🟢 Auto ONLINE — dati realtime ricevuti")
+            publish(Esito(EV.WAKE_ONLINE_REST, {}, "🟢 Car ONLINE — real-time data received"))
             return {"ok": True, "online": True, "code": code, "via": "rest",
                     "data": _payload(j1) or _payload(j2)}
         secs_left = (POLL_N - i - 1) * POLL_EVERY
-        publish(f"… in attesa risveglio ({_code_of(j1)}) — ancora ~{secs_left}s")
+        publish(Esito(EV.WAKE_POLLING, {"code": _code_of(j1) or "", "seconds": secs_left},
+                      f"… waiting for wake-up ({_code_of(j1)}) — ~{secs_left}s left"))
         time.sleep(POLL_EVERY)
 
-    publish("⌛ Auto ancora a riposo (A07900). Riprova quando è stata usata di recente o ha buon segnale")
+    publish(Esito(EV.WAKE_STILL_ASLEEP, {},
+                  "⌛ Car still asleep (A07900). Try again once it has been used recently "
+                  "or has good signal"))
     return {"ok": True, "online": False, "code": code, "reason": "still_asleep"}
 
 

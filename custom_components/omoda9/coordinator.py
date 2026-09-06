@@ -27,8 +27,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.helpers import translation
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
+
+from .core import events as EV
+from .core.events import Esito
 
 from .const import (
     DOMAIN, CAR_SEED, DEFAULT_AWAKE_WINDOW, DEFAULT_SESSION_EVERY, CERT_FILES,
@@ -176,16 +180,19 @@ CMD_CONFIRM_META = ("result", "resultTime", "seq", "reason", "hasAsy")
 #     parabrezza, lunotto e volante: sarebbero i candidati naturali, ma non è verificato →
 #     restano fuori tabella.
 # I modelId fuori tabella si riportano grezzi (`modulo <id>`): meglio un id che una bugia.
+# [Task C, 2026-09-06] Valori in INGLESE: sono il ripiego di `_descrivi_reason` quando la
+# traduzione non è disponibile. La traduzione vera vive sotto `esito.reason_modules.<mid>`
+# in translations/*.json (vedi `_descrivi_reason_tradotto`).
 REASON_MODULI = {
-    "0": "clima",
-    "4": "sedile guida riscaldato",   # isolato dal comando singolo (2026-08-01)
-    "5": "sedile riscaldato",
-    "6": "sedile riscaldato",
-    "8": "sedile riscaldato",
-    "9": "sedile guida ventilato",    # isolato dal comando singolo (2026-08-01)
-    "10": "sedile ventilato",
-    "11": "sedile ventilato",
-    "13": "sedile ventilato",
+    "0": "climate",
+    "4": "driver seat heating",     # isolato dal comando singolo (2026-08-01)
+    "5": "seat heating",
+    "6": "seat heating",
+    "8": "seat heating",
+    "9": "driver seat ventilation",  # isolato dal comando singolo (2026-08-01)
+    "10": "seat ventilation",
+    "11": "seat ventilation",
+    "13": "seat ventilation",
 }
 
 # [MED] Campi "geo" ammessi in self.position (push 1301 / sonda realtime). Si tiene
@@ -382,6 +389,11 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         # del taskId, che devono sopravvivere fra un comando e l'altro.
         self._ctx = None
         self._mqtt_up_ts = 0.0   # istante dell'ultima connect MQTT (uptime nel monitor)
+        # [Task C] catalogo delle traduzioni "esito", caricato una volta al setup
+        # (`async_refresh_esiti_catalog`) e letto SINCRONAMENTE da qualunque thread
+        # (paho, executor): un dict già pronto non ha bisogno di await. Vuoto finché non
+        # è stato caricato → `_traduci_esito` ricade sul ripiego inglese, mai un KeyError.
+        self._catalogo_esiti: dict[str, str] = {}
 
     # ───────────────── provisioning certificati mutual-TLS (FASE 3c) ─────────────────
     async def async_provision_certs(self) -> tuple[bool, str]:
@@ -883,7 +895,12 @@ class Omoda9Coordinator(DataUpdateCoordinator):
 
         patch.update({"fields": fields_copy, "msg_fields": msg_fields, "awake": True})
         if is_confirmation:
-            patch["cmd_status"] = self._esito_con_note(self._format_cmd_result(data))
+            # [Task C] `_format_cmd_result` ritorna un `Esito` strutturato; si traduce QUI
+            # (thread paho, catalogo già in memoria — nessun await necessario) prima di
+            # riattaccare gli avvisi, che sono già testo tradotto (vedi `_send_command`).
+            testo_confermato = self._traduci_esito(self._format_cmd_result(data),
+                                                   self._catalogo_esiti)
+            patch["cmd_status"] = self._esito_con_note(testo_confermato)
             # [H2] il contatore è l'ancora della pausa di coda → si tocca sotto lock, perché
             # lo legge il loop mentre qui siamo nel thread paho. Farlo avanzare SBLOCCA il
             # comando successivo: da qui in poi l'auto non è più occupata da questo.
@@ -951,12 +968,82 @@ class Omoda9Coordinator(DataUpdateCoordinator):
             return False
         return all(str(v.get("modelId")) == "0" for v in reason)
 
+    # ───────────────── Task C (2026-09-06): traduzione degli `Esito` strutturati ─────────────────
+    # `core/` produce ora eventi strutturati (codice + parametri + ripiego inglese, vedi
+    # `core/events.py`) invece di frasi già scritte in italiano: non può sapere in che lingua
+    # tradurre (non importa Home Assistant). La traduzione vera vive qui.
+    async def async_refresh_esiti_catalog(self) -> None:
+        """Ricarica `self._catalogo_esiti`: chiamata una volta al setup dell'entry (prima che
+        arrivi il primo comando/sveglia) e disponibile ai chiamanti sincroni da lì in poi.
+        Una lingua cambiata a runtime richiede un reload dell'integrazione per essere vista
+        qui — stesso limite pratico di `self.language` (Accept-Language dell'account), non
+        un problema nuovo di questa release."""
+        self._catalogo_esiti = await self._carica_catalogo_esiti()
+
+    async def _carica_catalogo_esiti(self) -> dict[str, str]:
+        """Traduzioni della sezione "esito" nella lingua DI HOME ASSISTANT (non quella
+        dell'account Chery, `self.language`: quella serve solo agli SMS/e-mail OTP).
+        `async_get_translations` tiene una cache in memoria per lingua+categoria — I/O solo
+        al primo giro, poi è un semplice dizionario."""
+        try:
+            return await translation.async_get_translations(
+                self.hass, self.hass.config.language, "esito", integrations=[DOMAIN])
+        except Exception as err:  # noqa: BLE001 — un problema di traduzione non deve bloccare un comando
+            _LOGGER.debug("[i18n] catalogo esiti non caricato: %s", err)
+            return {}
+
+    @staticmethod
+    def _traduci_esito(esito, catalogo: dict[str, str]) -> str:
+        """SINCRONA e pura (nessun I/O): può girare in un thread executor, a differenza di
+        `_carica_catalogo_esiti` che deve stare sul loop. Un `esito` che non è un `Esito`
+        (stringa già pronta — tutto ciò che questa release non ha convertito) passa
+        invariato: fail open, un messaggio non ancora migrato non sparisce."""
+        if not isinstance(esito, Esito):
+            return str(esito) if esito is not None else ""
+        prefix = f"component.{DOMAIN}.esito."
+        parametri = dict(esito.params)
+        # sotto-traduzioni: la chiave grezza (comando, codice) diventa il testo giusto PRIMA
+        # di riempire il modello principale.
+        if "command_key" in parametri:
+            parametri["command"] = catalogo.get(
+                f"{prefix}commands.{parametri['command_key']}",
+                parametri.get("command") or parametri["command_key"])
+        if "meaning_key" in parametri:
+            parametri["meaning"] = catalogo.get(
+                f"{prefix}code_meanings.{parametri['meaning_key']}",
+                parametri.get("meaning") or "")
+        if "reason_raw" in parametri:
+            # partial_execution/partial_execution_climate_only: l'elenco dei moduli va
+            # ricostruito qui perché i loro NOMI sono anch'essi da tradurre (vedi
+            # `_descrivi_reason_tradotto`), non semplici valori da interpolare.
+            parametri["modules"] = Omoda9Coordinator._descrivi_reason_tradotto(
+                parametri.pop("reason_raw"), catalogo)
+        skipped = parametri.get("skipped_count") or 0
+        suffisso_modello = catalogo.get(f"{prefix}messages.fields_skipped_suffix")
+        if skipped and suffisso_modello:
+            try:
+                parametri["skipped_note"] = suffisso_modello.format(count=skipped)
+            except (KeyError, IndexError, ValueError):
+                parametri["skipped_note"] = ""
+        else:
+            parametri.setdefault("skipped_note", "")
+        modello = catalogo.get(f"{prefix}messages.{esito.code}")
+        testo = modello if modello else (esito.text_en or esito.code)
+        try:
+            return testo.format(**parametri)
+        except (KeyError, IndexError, ValueError):
+            # placeholder che il modello tradotto non ha ricevuto (traduzione disallineata
+            # dal codice): meglio l'inglese completo che una KeyError che rompe il comando.
+            return esito.text_en or esito.code
+
     @staticmethod
     def _descrivi_reason(reason) -> str:
-        """`reason` grezzo → elenco leggibile di moduli, con i codici in coda.
+        """`reason` grezzo → elenco leggibile di moduli, con i codici in coda (INGLESE: è il
+        ripiego usato in `text_en` quando manca la traduzione — vedi `_descrivi_reason_tradotto`
+        per la versione che consulta il catalogo).
 
         Da `[{'code':'11','modelId':'0'},{'code':'1','modelId':'9'}, …]` ricava
-        «clima, 4× sedile ventilato (codici 0:11, 9:1, …)». I moduli si contano invece di
+        «climate, 4× seat ventilation (codes 0:11, 9:1, …)». I moduli si contano invece di
         ripeterli, i codici restano perché sono l'unico appiglio per capire a posteriori
         *cosa* è andato storto. Se la struttura non è quella attesa si torna al grezzo:
         meglio illeggibile che inventato."""
@@ -968,13 +1055,37 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         codici: list[str] = []
         for voce in reason:
             mid = str(voce.get("modelId", "?"))
-            nome = REASON_MODULI.get(mid, f"modulo {mid}")
+            nome = REASON_MODULI.get(mid, f"module {mid}")
             if nome not in conteggio:
                 nomi.append(nome)
             conteggio[nome] = conteggio.get(nome, 0) + 1
             codici.append(f"{mid}:{voce.get('code', '?')}")
         elenco = ", ".join(f"{conteggio[n]}× {n}" if conteggio[n] > 1 else n for n in nomi)
-        return f"{elenco} (codici {', '.join(codici)})"
+        return f"{elenco} (codes {', '.join(codici)})"
+
+    @staticmethod
+    def _descrivi_reason_tradotto(reason, catalogo: dict[str, str]) -> str:
+        """Come `_descrivi_reason`, ma consultando il catalogo tradotto per il nome di ogni
+        modulo e per l'etichetta "codes"/"codici" — usata da `_traduci_esito` per i codici
+        `partial_execution`/`partial_execution_climate_only`."""
+        if not isinstance(reason, (list, tuple)) or not all(
+                isinstance(v, dict) for v in reason):
+            return str(reason)
+        prefix = f"component.{DOMAIN}.esito."
+        nomi: list[str] = []
+        conteggio: dict[str, int] = {}
+        codici: list[str] = []
+        for voce in reason:
+            mid = str(voce.get("modelId", "?"))
+            nome = catalogo.get(f"{prefix}reason_modules.{mid}",
+                                REASON_MODULI.get(mid, f"module {mid}"))
+            if nome not in conteggio:
+                nomi.append(nome)
+            conteggio[nome] = conteggio.get(nome, 0) + 1
+            codici.append(f"{mid}:{voce.get('code', '?')}")
+        elenco = ", ".join(f"{conteggio[n]}× {n}" if conteggio[n] > 1 else n for n in nomi)
+        codes_label = catalogo.get(f"{prefix}messages.codes_label", "codes")
+        return f"{elenco} ({codes_label} {', '.join(codici)})"
 
     def _esito_con_note(self, esito: str) -> str:
         """L'esito della conferma dell'auto, con riattaccati gli avvisi del nostro comando.
@@ -1021,17 +1132,21 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         result = str(data.get("result", "")).strip()
         reason = data.get("reason")
         if reason and Omoda9Coordinator._solo_clima(reason):
-            return ("Comando ricevuto dall'auto — unica segnalazione: "
-                    f"{Omoda9Coordinator._descrivi_reason(reason)}. "
-                    "Da sola non indica un guasto.")[:255]
+            return Esito(EV.PARTIAL_EXECUTION_CLIMATE_ONLY, {"reason_raw": reason},
+                        ("Received by the car — only report: "
+                         f"{Omoda9Coordinator._descrivi_reason(reason)}. "
+                         "On its own this does not indicate a fault.")[:255])
         if reason:  # l'auto segnala uno o più moduli che non hanno eseguito
-            return ("Eseguito solo in parte ⚠️ — l'auto segnala un problema su: "
-                    f"{Omoda9Coordinator._descrivi_reason(reason)}")[:255]
+            return Esito(EV.PARTIAL_EXECUTION, {"reason_raw": reason},
+                        ("Partly executed ⚠️ — the car reports a problem with: "
+                         f"{Omoda9Coordinator._descrivi_reason(reason)}")[:255])
         if result == "5":
-            return "Comando in esecuzione sull'auto… ⏳"
+            return Esito(EV.COMMAND_IN_PROGRESS, {}, "Command running on the car… ⏳")
         if result in ("1", "2"):
-            return "Comando eseguito e confermato dall'auto ✅"
-        return f"Conferma ricevuta dall'auto (codice esito {result or '?'})"[:255]
+            return Esito(EV.COMMAND_CONFIRMED, {},
+                        "Command executed and confirmed by the car ✅")
+        return Esito(EV.COMMAND_CONFIRMED_RAW, {"result": result or "?"},
+                    f"Confirmation received from the car (result code {result or '?'})"[:255])
 
     def _update(self, patch: dict) -> None:
         """Aggiorna self.data e notifica le entità (thread-safe dal thread paho)."""
@@ -1179,7 +1294,7 @@ class Omoda9Coordinator(DataUpdateCoordinator):
             await asyncio.wait_for(self._cmd_gate.acquire(), timeout=COMMAND_QUEUE_WAIT)
         except asyncio.TimeoutError as err:
             raise HomeAssistantError(
-                "L'auto è ancora impegnata coi comandi precedenti — riprova tra qualche istante."
+                translation_domain=DOMAIN, translation_key="command_queue_busy",
             ) from err
         t0 = time.monotonic()
         # ⚠️ Il rilascio dello slot NON può stare solo nei rami che si vedono. Prima era
@@ -1253,9 +1368,14 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         note: list[str] = []
 
         def emit(m):
-            msgs.append(str(m))
+            # [Task C] `m` può essere un `Esito` strutturato o (per ciò che questa release
+            # non ha ancora convertito) una stringa già pronta: `_traduci_esito` gestisce
+            # entrambi. Il log resta in inglese di proposito (`%s` su `m` chiama
+            # `Esito.__str__`, mai tradotto): è per chi legge il codice, non per l'utente.
+            testo = self._traduci_esito(m, self._catalogo_esiti)
+            msgs.append(testo)
             _LOGGER.info("[cmd] %s", m)
-            self._update({"cmd_status": str(m)[:STATO_MAX]})
+            self._update({"cmd_status": testo[:STATO_MAX]})
 
         def avvisa(m):
             """Avviso che l'utente deve poter LEGGERE, non solo un passaggio.
@@ -1263,7 +1383,7 @@ class Omoda9Coordinator(DataUpdateCoordinator):
             Passa comunque da `emit` — il registro e lo stato istantaneo restano come prima —
             ma viene anche conservato, perché pubblicarlo e basta non lo faceva arrivare a
             nessuno: il passaggio successivo lo copriva in millisecondi."""
-            note.append(str(m))
+            note.append(self._traduci_esito(m, self._catalogo_esiti))
             emit(m)
 
         # Gli avvisi appartengono a QUESTO comando: si azzerano all'inizio, non alla fine.
@@ -1277,7 +1397,7 @@ class Omoda9Coordinator(DataUpdateCoordinator):
             # servono di più. `finally` per la stessa ragione del resto di questa release —
             # un'eccezione, compresa una cancellazione, non deve far sparire l'informazione.
             self._note_cmd = list(note)
-        esito = msgs[-1] if msgs else "inviato"
+        esito = msgs[-1] if msgs else "sent"
         finale = unisci_esito_e_note(esito, note)
         # L'ultimo `emit` ha già pubblicato l'esito NUDO: qui lo si riscrive con gli avvisi
         # attaccati. Due aggiornamenti invece di uno, ma è l'unico modo per comporre una riga
@@ -1382,8 +1502,11 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         from .core import wake as WAKE
 
         def emit(m):
+            # [Task C] `do_wake` produce `Esito` strutturati (vedi core/wake.py): si traduce
+            # QUI, sincrono, col catalogo già in memoria (siamo in un thread executor).
             _LOGGER.info("[wake] %s", m)
-            self._update({"wake_status": str(m)[:255]})
+            testo = self._traduci_esito(m, self._catalogo_esiti)
+            self._update({"wake_status": testo[:255]})
 
         self._update({"last_wake": dt_util.utcnow()})
         # is_awake: se l'auto sta già pubblicando su MQTT non serve l'SMS.
@@ -1871,7 +1994,10 @@ class Omoda9Coordinator(DataUpdateCoordinator):
 
     def _check_session(self) -> tuple[bool, str, str]:
         from .core import session as SESSION
-        ok, detail, status = SESSION.check(self.ctx)
+        ok, esito, status = SESSION.check(self.ctx)
+        # [Task C] traduzione sincrona: `_catalogo_esiti` è già in memoria (caricato al
+        # setup), niente await necessario qui dentro un thread executor.
+        detail = self._traduci_esito(esito, self._catalogo_esiti)
         # Difesa contro il drift dei due letterali: se core/session.py cambiasse il valore di
         # STATUS_EXPIRED, la reauth continuerebbe a scattare (ci si allinea al modulo, che è
         # la fonte, invece di confrontare alla cieca la costante locale).
@@ -1906,10 +2032,12 @@ class Omoda9Coordinator(DataUpdateCoordinator):
 
     def _confirm_otp(self, code: str) -> tuple[bool, str]:
         from .core import session as SESSION
-        return SESSION.confirm_otp(self.ctx, code or "")
+        ok, esito = SESSION.confirm_otp(self.ctx, code or "")
+        return ok, self._traduci_esito(esito, self._catalogo_esiti)
 
     def _login_with_password(self, password: str) -> tuple[bool, str]:
         """Reauth degli account password: riconia il token con la password (usa-e-getta, mai
         salvata) e ricontrolla la sessione. Speculare a `_confirm_otp` per il ramo OTP."""
         from .core import session as SESSION
-        return SESSION.login_with_password(self.ctx, password or "")
+        ok, esito = SESSION.login_with_password(self.ctx, password or "")
+        return ok, self._traduci_esito(esito, self._catalogo_esiti)

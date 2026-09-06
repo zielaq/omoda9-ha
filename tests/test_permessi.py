@@ -330,7 +330,7 @@ def test_send_pota_davvero_il_corpo(core, cloud, ctx):
     inviato = cloud.calls_to("/asc/vehicleControl/")[0]["body"]
     assert "backDefrosting" not in inviato
     assert inviato["mSeatHeating"] == "3"        # il resto della macro parte comunque
-    assert "saltate" in esito and "skipped" in esito
+    assert "saltate" in str(esito) and "skipped" in str(esito)
 
 
 def test_send_sull_omoda9_resta_identico(core, cloud, ctx):
@@ -421,7 +421,7 @@ def test_antifurto_avvisa_prima_del_rifiuto(core, cloud, ctx):
     # fallimento vero → CommandError, così lo switch ottimistico torna indietro invece di
     # mostrare un finto successo. La novità è l'avviso che lo PRECEDE.
     with pytest.raises(commands.CommandError):
-        commands.send(ctx, "antifurto_on", emit=detti.append)
+        commands.send(ctx, "antifurto_on", emit=lambda m: detti.append(str(m)))
 
     assert any("non autorizza affatto" in m for m in detti), detti
     # …e il comando parte lo stesso: l'avviso spiega, non censura
@@ -435,7 +435,7 @@ def test_antifurto_nessun_avviso_dove_consentito(core, cloud, ctx):
     cloud.on("/act/theftAlarm/setSwitch", code="A00079")
     detti = []
 
-    commands.send(ctx, "antifurto_on", emit=detti.append)
+    commands.send(ctx, "antifurto_on", emit=lambda m: detti.append(str(m)))
 
     assert not any("non autorizza affatto" in m for m in detti), detti
 
@@ -509,7 +509,7 @@ def test_verdetto_e_potatura_convivono(core, P, cloud, ctx):
 
     # il comando parte lo stesso e il backend lo rifiuta: il verdetto informa, non sopprime
     with pytest.raises(commands.CommandError):
-        commands.send(ctx, "clima_raffredda_on", emit=detti.append)
+        commands.send(ctx, "clima_raffredda_on", emit=lambda m: detti.append(str(m)))
 
     assert any("salto" in m for m in detti), f"manca l'elenco dei campi potati: {detti}"
     assert any("non autorizza affatto" in m for m in detti), (
@@ -669,7 +669,7 @@ def test_ripiego_non_annuncia_una_durata_che_l_utente_non_ha_scelto(core, cloud,
     cloud.on("/asc/vehicleControl/", code="A00079")
     detti = []
 
-    commands.send(ctx, "sedile_guida_caldo", emit=detti.append)
+    commands.send(ctx, "sedile_guida_caldo", emit=lambda m: detti.append(str(m)))
 
     assert not any("durata" in m for m in detti), (
         f"annunciata una durata che l'utente non ha mai scelto: {detti}")
@@ -689,7 +689,7 @@ def test_la_durata_scelta_dall_utente_resta_annunciata(core, cloud, ctx):
     cloud.on("/asc/vehicleControl/", code="A00079")
     detti = []
 
-    commands.send(ctx, "clima_on", emit=detti.append, params={"times": "30"})
+    commands.send(ctx, "clima_on", emit=lambda m: detti.append(str(m)), params={"times": "30"})
 
     assert any("durata" in m and "30" in m for m in detti), detti
     assert cloud.calls_to("/asc/vehicleControl/")[0]["body"]["times"] == "10"

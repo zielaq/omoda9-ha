@@ -88,7 +88,7 @@ def test_esito_comando_per_codice(core, cloud, ctx, code, atteso):
 
     if atteso["ok"]:
         esito = commands.send(ctx, "blocca")
-        assert code in esito
+        assert code in str(esito)
         return
 
     with pytest.raises(commands.CommandError) as err:
@@ -116,7 +116,7 @@ def test_taskid_rifiutato_si_riconia_e_riprova_una_volta(core, cloud, ctx, code)
     cloud.on("/asc/vehicleControl/lockControl", risposta)
     esito = commands.send(ctx, "blocca")
 
-    assert "A00079" in esito
+    assert "A00079" in str(esito)
     assert tentativi["n"] == 2, "doveva riprovare esattamente una volta"
     assert cloud.count("checkPassword") >= 1, "il taskId doveva essere ri-coniato"
 

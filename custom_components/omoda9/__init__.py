@@ -80,6 +80,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = Omoda9Coordinator(hass, entry)
 
+    # [Task C] catalogo delle traduzioni "esito", PRIMA di ogni comando/sveglia/controllo
+    # sessione: sono loro a leggerlo (sincrono, da thread executor/paho). Se fallisse
+    # (improbabile: legge solo file locali) `_traduci_esito` ricade sull'inglese — non è
+    # un motivo per fermare il setup.
+    await coordinator.async_refresh_esiti_catalog()
+
     # FASE 3c: i cert mutual-TLS devono esserci PRIMA di connettere l'MQTT auto.
     ok, detail = await coordinator.async_provision_certs()
     if not ok:

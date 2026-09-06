@@ -174,8 +174,10 @@ async def test_attesa_annunciata_mentre_sveglia_lauto(hass, integrazione_avviata
     await hass.async_block_till_done()
 
     avviso = coord.data.get("cmd_status") or ""
-    assert "Waking the car" in avviso and "Sveglio l'auto" in avviso, (
-        "durante l'attesa di sveglia va pubblicata una riga bilingue su «Esito comando»")
+    # [Task C] non più un testo bilingue scritto a mano: un `Esito` tradotto nella lingua
+    # di Home Assistant (inglese di default nei test).
+    assert "Waking the car" in avviso, (
+        "durante l'attesa di sveglia va pubblicata una riga su «Esito comando»")
     assert len(avviso) <= 203, "lo stato di HA si tronca: il testo deve restare corto"
 
 

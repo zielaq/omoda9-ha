@@ -126,7 +126,7 @@ async def test_la_conferma_dellauto_non_cancella_lavviso(hass, integrazione_avvi
     await hass.async_block_till_done()
 
     stato = coord.data["cmd_status"]
-    assert "confermato dall'auto" in stato, f"l'esito vero è sparito: {stato!r}"
+    assert "confirmed by the car" in stato, f"l'esito vero è sparito: {stato!r}"
     assert AVVISO_DURATA in stato, f"la conferma ha cancellato l'avviso: {stato!r}"
 
 
@@ -145,7 +145,7 @@ async def test_una_conferma_tardiva_non_si_prende_i_nostri_avvisi(hass, integraz
     await hass.async_block_till_done()
 
     stato = coord.data["cmd_status"]
-    assert "confermato dall'auto" in stato
+    assert "confirmed by the car" in stato
     assert AVVISO_DURATA not in stato, (
         f"avvisi di mezz'ora fa appiccicati a una conferma altrui: {stato!r}")
 

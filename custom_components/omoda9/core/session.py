@@ -33,6 +33,8 @@ _LOGGER = logging.getLogger(__name__)
 # P2-2: import relativo di pacchetto (prima: nome nudo + `sys.path.insert(HERE)`).
 from . import wake  # riusa _bff_login / _refresh_token / TOKEN_PATH
 from . import mask  # mascheratura unica dei dati personali nelle frasi che escono da qui
+from . import events as EV
+from .events import Esito
 
 # Marcatore con cui i sottoprocessi dichiarano la CAUSA di un fallimento (login_omoda.MOTIVO).
 # Duplicato qui di proposito: importare `login_omoda` da questo modulo significherebbe tirarsi
@@ -70,9 +72,11 @@ def check(ctx):
     try:
         ut, tu = wake._bff_login(ctx)
     except Exception as e:
-        return False, f"errore rete: {type(e).__name__}", STATUS_NET_ERROR
+        esito = Esito(EV.SESSION_NETWORK_ERROR, {"detail": type(e).__name__},
+                      f"network error: {type(e).__name__}")
+        return False, esito, STATUS_NET_ERROR
     if ut:
-        return True, "Sessione attiva ✅", STATUS_OK
+        return True, Esito(EV.SESSION_OK, {}, "Session active ✅"), STATUS_OK
     # Il login è fallito. Ma se è fallito perché il RINNOVO non è nemmeno partito (rete
     # giù, timeout, DNS), la sessione può benissimo essere ancora viva di là: dichiararla
     # scaduta farebbe comparire la card «Riautentica» e brucerebbe un OTP per niente.
@@ -83,9 +87,13 @@ def check(ctx):
     except Exception:  # noqa: BLE001 — contesti ridotti nei test/diagnostica
         motivo, fresco = "", False
     if fresco and motivo.startswith("rete:"):
-        return False, f"rinnovo non riuscito per la rete ({motivo[5:]})", STATUS_NET_ERROR
+        esito = Esito(EV.SESSION_NETWORK_ERROR, {"detail": motivo[5:]},
+                      f"renewal failed due to the network ({motivo[5:]})")
+        return False, esito, STATUS_NET_ERROR
     return (False,
-            "Sessione scaduta ❌ — riautentica da Home Assistant e chiedi un codice nuovo",
+            Esito(EV.SESSION_EXPIRED_LONG, {},
+                 "Session expired ❌ — re-authenticate from Home Assistant and request a "
+                 "new code"),
             STATUS_EXPIRED)
 
 
@@ -272,7 +280,9 @@ def confirm_otp(ctx, code, emit=lambda m: None):
     # H7: esito su returncode + sentinella stabile, non su sottostringhe localizzate
     if r.returncode == 0 and "RESULT: OK" in out:
         ok, _detail, _status = check(ctx)
-        return ok, ("Sessione ripristinata ✅" if ok else "token coniato ma login ancora KO")
+        return ok, (Esito(EV.SESSION_RESTORED, {}, "Session restored ✅") if ok
+                else Esito(EV.SESSION_TOKEN_MINTED_STILL_KO, {},
+                          "token minted but login still failing"))
     return False, f"codice rifiutato: {_riga_utile(out, r.returncode)[:120]}"
 
 
@@ -299,7 +309,9 @@ def login_with_password(ctx, password, emit=lambda m: None):
     _LOGGER.debug("Omoda9 login: conio token via password rc=%s\n%s", r.returncode, out.strip())
     if r.returncode == 0 and "RESULT: OK" in out:
         ok, _detail, _status = check(ctx)
-        return ok, ("Sessione ripristinata ✅" if ok else "token coniato ma login ancora KO")
+        return ok, (Esito(EV.SESSION_RESTORED, {}, "Session restored ✅") if ok
+                else Esito(EV.SESSION_TOKEN_MINTED_STILL_KO, {},
+                          "token minted but login still failing"))
     return False, f"password rifiutata: {_riga_utile(out, r.returncode)[:120]}"
 
 

@@ -37,6 +37,8 @@ from . import omoda_auth as A
 from . import codes
 from . import permessi
 from . import routing
+from . import events as EV
+from .events import Esito
 from .pin_lockout import PinLockout, PinLockedError
 # H8: rimosso `importlib.reload(tsp_sign)` a import-time (side-effect inutile; tsp_sign
 # non viene mutato altrove e ricaricarlo all'import poteva azzerare eventuali monkeypatch).
@@ -56,16 +58,16 @@ COMMANDS = [
     # `params`); i valori nel body sono solo i default se invocato senza override.
     ("clima_on",  {"endpoint": "airControl",
                    "body": {"airControlType": "1", "airType": "1", "temperature": "21.0", "times": "15"},
-                   "name": "Clima acceso", "icon": "mdi:air-conditioner", "group": "Clima"}),
+                   "name": "Climate on", "icon": "mdi:air-conditioner", "group": "Clima"}),
     ("clima_off", {"endpoint": "airControl",
                    "body": {"airControlType": "0", "airType": "1", "temperature": "21.0", "times": "15"},
-                   "name": "Clima spento", "icon": "mdi:air-conditioner", "group": "Clima"}),
+                   "name": "Climate off", "icon": "mdi:air-conditioner", "group": "Clima"}),
     ("defrost_parabrezza", {"endpoint": "frontWindshieldControl",
                    "body": {"frontWindshieldHeat": "1", "times": "15"},
-                   "name": "Sbrina parabrezza", "icon": "mdi:car-defrost-front", "group": "Clima"}),
+                   "name": "Defrost windshield", "icon": "mdi:car-defrost-front", "group": "Clima"}),
     ("defrost_parabrezza_off", {"endpoint": "frontWindshieldControl",
                    "body": {"frontWindshieldHeat": "0"},
-                   "name": "Sbrina parabrezza OFF", "icon": "mdi:car-defrost-front", "group": "Clima"}),
+                   "name": "Defrost windshield OFF", "icon": "mdi:car-defrost-front", "group": "Clima"}),
     # Disappannamento parabrezza: NON è un doppione di `defrost_parabrezza`. Sono due funzioni che
     # l'auto tiene distinte, con campo di stato proprio ciascuna:
     #   frontWindshieldControl → `frontWindshieldHeat` (riscaldamento elettrico del vetro)
@@ -82,73 +84,73 @@ COMMANDS = [
     ("disappanna_parabrezza", {"endpoint": "airControl",
                    "body": {"airControlType": "1", "airType": "1", "frontDefrosting": "1",
                             "temperature": "21.0", "times": "15"},
-                   "name": "Disappanna parabrezza", "icon": "mdi:car-defrost-front", "group": "Clima"}),
+                   "name": "Demist windshield", "icon": "mdi:car-defrost-front", "group": "Clima"}),
     ("disappanna_parabrezza_off", {"endpoint": "airControl",
                    "body": {"airControlType": "0", "airType": "1", "temperature": "21.0", "times": "15"},
-                   "name": "Disappanna parabrezza OFF", "icon": "mdi:car-defrost-front", "group": "Clima"}),
+                   "name": "Demist windshield OFF", "icon": "mdi:car-defrost-front", "group": "Clima"}),
     ("defrost_lunotto", {"endpoint": "backDefrostingControl",
                    "body": {"backDefrosting": "1", "times": "15"},
-                   "name": "Sbrina lunotto", "icon": "mdi:car-defrost-rear", "group": "Clima"}),
+                   "name": "Defrost rear window", "icon": "mdi:car-defrost-rear", "group": "Clima"}),
     ("defrost_lunotto_off", {"endpoint": "backDefrostingControl",
                    "body": {"backDefrosting": "0"},
-                   "name": "Sbrina lunotto OFF", "icon": "mdi:car-defrost-rear", "group": "Clima"}),
+                   "name": "Defrost rear window OFF", "icon": "mdi:car-defrost-rear", "group": "Clima"}),
     ("volante_caldo", {"endpoint": "steeringWheelControl",
                    "body": {"controlType": "1"},
-                   "name": "Volante riscaldato", "icon": "mdi:steering", "group": "Clima"}),
+                   "name": "Heated steering wheel", "icon": "mdi:steering", "group": "Clima"}),
     ("volante_caldo_off", {"endpoint": "steeringWheelControl",
                    "body": {"controlType": "0"},
-                   "name": "Volante riscaldato OFF", "icon": "mdi:steering", "group": "Clima"}),
+                   "name": "Heated steering wheel OFF", "icon": "mdi:steering", "group": "Clima"}),
     ("sedile_guida_caldo", {"endpoint": "seatControl",
                    "body": {"mSeatHeating": "3", "times": "15"},
-                   "name": "Sedile guida riscaldato", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+                   "name": "Driver seat heating", "icon": "mdi:car-seat-heater", "group": "Clima"}),
     ("sedile_guida_caldo_off", {"endpoint": "seatControl",
                    "body": {"mSeatHeating": "0"},
-                   "name": "Sedile guida riscaldato OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+                   "name": "Driver seat heating OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
     ("sedile_guida_aria", {"endpoint": "seatControl",
                    "body": {"mSeatAiry": "3", "times": "15"},
-                   "name": "Sedile guida ventilato", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+                   "name": "Driver seat ventilation", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
     ("sedile_guida_aria_off", {"endpoint": "seatControl",
                    "body": {"mSeatAiry": "0"},
-                   "name": "Sedile guida ventilato OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+                   "name": "Driver seat ventilation OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
     # Sedili passeggero e posteriori — stesso endpoint singolo `seatControl`, parametri
     # confermati dal bean CVSeatControlReqBean (p=passeggero, bl=post.SX, br=post.DX).
     # Posteriore centrale: il bean NON ha un parametro dedicato → nessun comando.
     ("sedile_passeggero_caldo", {"endpoint": "seatControl",
                    "body": {"pSeatHeating": "3", "times": "15"},
-                   "name": "Sedile passeggero riscaldato", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+                   "name": "Passenger seat heating", "icon": "mdi:car-seat-heater", "group": "Clima"}),
     ("sedile_passeggero_caldo_off", {"endpoint": "seatControl",
                    "body": {"pSeatHeating": "0"},
-                   "name": "Sedile passeggero riscaldato OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+                   "name": "Passenger seat heating OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
     ("sedile_passeggero_aria", {"endpoint": "seatControl",
                    "body": {"pSeatAiry": "3", "times": "15"},
-                   "name": "Sedile passeggero ventilato", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+                   "name": "Passenger seat ventilation", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
     ("sedile_passeggero_aria_off", {"endpoint": "seatControl",
                    "body": {"pSeatAiry": "0"},
-                   "name": "Sedile passeggero ventilato OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+                   "name": "Passenger seat ventilation OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
     ("sedile_post_sx_caldo", {"endpoint": "seatControl",
                    "body": {"blSeatHeating": "3", "times": "15"},
-                   "name": "Sedile post. SX riscaldato", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+                   "name": "Rear left seat heating", "icon": "mdi:car-seat-heater", "group": "Clima"}),
     ("sedile_post_sx_caldo_off", {"endpoint": "seatControl",
                    "body": {"blSeatHeating": "0"},
-                   "name": "Sedile post. SX riscaldato OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+                   "name": "Rear left seat heating OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
     ("sedile_post_sx_aria", {"endpoint": "seatControl",
                    "body": {"blSeatAiry": "3", "times": "15"},
-                   "name": "Sedile post. SX ventilato", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+                   "name": "Rear left seat ventilation", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
     ("sedile_post_sx_aria_off", {"endpoint": "seatControl",
                    "body": {"blSeatAiry": "0"},
-                   "name": "Sedile post. SX ventilato OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+                   "name": "Rear left seat ventilation OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
     ("sedile_post_dx_caldo", {"endpoint": "seatControl",
                    "body": {"brSeatHeating": "3", "times": "15"},
-                   "name": "Sedile post. DX riscaldato", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+                   "name": "Rear right seat heating", "icon": "mdi:car-seat-heater", "group": "Clima"}),
     ("sedile_post_dx_caldo_off", {"endpoint": "seatControl",
                    "body": {"brSeatHeating": "0"},
-                   "name": "Sedile post. DX riscaldato OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
+                   "name": "Rear right seat heating OFF", "icon": "mdi:car-seat-heater", "group": "Clima"}),
     ("sedile_post_dx_aria", {"endpoint": "seatControl",
                    "body": {"brSeatAiry": "3", "times": "15"},
-                   "name": "Sedile post. DX ventilato", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+                   "name": "Rear right seat ventilation", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
     ("sedile_post_dx_aria_off", {"endpoint": "seatControl",
                    "body": {"brSeatAiry": "0"},
-                   "name": "Sedile post. DX ventilato OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
+                   "name": "Rear right seat ventilation OFF", "icon": "mdi:car-seat-cooler", "group": "Clima"}),
 
     # — Clima: macro comfort "tutto" (coolingControl/heatingControl) —
     # Preset unico che accende clima + TUTTI i sedili (+ sbrinatori e volante per il caldo)
@@ -162,51 +164,51 @@ COMMANDS = [
     ("clima_raffredda_on", {"endpoint": "coolingControl",
                    "body": {"airControlType": "1", "airType": "1", "temperature": "15.0", "duration": "15",
                             "mSeatAiry": "3", "pSeatAiry": "3", "blSeatAiry": "3", "brSeatAiry": "3"},
-                   "name": "Raffredda tutto", "icon": "mdi:snowflake", "group": "Clima"}),
+                   "name": "Cool everything", "icon": "mdi:snowflake", "group": "Clima"}),
     ("clima_raffredda_off", {"endpoint": "coolingControl",
                    "body": {"airControlType": "0", "airType": "1", "temperature": "15.0", "duration": "15",
                             "mSeatAiry": "0", "pSeatAiry": "0", "blSeatAiry": "0", "brSeatAiry": "0"},
-                   "name": "Raffredda tutto OFF", "icon": "mdi:snowflake-off", "group": "Clima"}),
+                   "name": "Cool everything OFF", "icon": "mdi:snowflake-off", "group": "Clima"}),
     ("clima_riscalda_on", {"endpoint": "heatingControl",
                    "body": {"airControlType": "1", "airType": "1", "temperature": "31.0", "duration": "15",
                             "frontWindshieldHeat": "1", "backDefrosting": "1", "steerWheelHeatSwitch": "1",
                             "mSeatHeating": "3", "pSeatHeating": "3", "blSeatHeating": "3", "brSeatHeating": "3"},
-                   "name": "Riscalda tutto", "icon": "mdi:heat-wave", "group": "Clima"}),
+                   "name": "Heat everything", "icon": "mdi:heat-wave", "group": "Clima"}),
     ("clima_riscalda_off", {"endpoint": "heatingControl",
                    "body": {"airControlType": "0", "airType": "1", "temperature": "31.0", "duration": "15",
                             "frontWindshieldHeat": "0", "backDefrosting": "0", "steerWheelHeatSwitch": "0",
                             "mSeatHeating": "0", "pSeatHeating": "0", "blSeatHeating": "0", "brSeatHeating": "0"},
-                   "name": "Riscalda tutto OFF", "icon": "mdi:heat-wave", "group": "Clima"}),
+                   "name": "Heat everything OFF", "icon": "mdi:heat-wave", "group": "Clima"}),
 
     # — Porte / chiusure —
     ("sblocca",   {"endpoint": "lockControl", "body": {"lockType": "1"},
-                   "name": "Sblocca porte", "icon": "mdi:lock-open-variant", "group": "Accessi"}),
+                   "name": "Unlock doors", "icon": "mdi:lock-open-variant", "group": "Accessi"}),
     ("blocca",    {"endpoint": "lockControl", "body": {"lockType": "0"},
-                   "name": "Blocca porte", "icon": "mdi:lock", "group": "Accessi"}),
+                   "name": "Lock doors", "icon": "mdi:lock", "group": "Accessi"}),
     ("baule_apri",  {"endpoint": "powerLiftgateControl", "body": {"controlType": "1"},
-                   "name": "Apri baule", "icon": "mdi:car-back", "group": "Accessi"}),
+                   "name": "Open trunk", "icon": "mdi:car-back", "group": "Accessi"}),
     ("baule_chiudi", {"endpoint": "powerLiftgateControl", "body": {"controlType": "0"},
-                   "name": "Chiudi baule", "icon": "mdi:car-back", "group": "Accessi"}),
+                   "name": "Close trunk", "icon": "mdi:car-back", "group": "Accessi"}),
 
     # — Finestrini / tetto —
     ("finestrini_apri",   {"endpoint": "windowControl", "body": {"controlType": "1"},
-                   "name": "Apri finestrini", "icon": "mdi:car-door", "group": "Finestrini e tetto"}),
+                   "name": "Open windows", "icon": "mdi:car-door", "group": "Finestrini e tetto"}),
     ("finestrini_chiudi", {"endpoint": "windowControl", "body": {"controlType": "0"},
-                   "name": "Chiudi finestrini", "icon": "mdi:car-door", "group": "Finestrini e tetto"}),
+                   "name": "Close windows", "icon": "mdi:car-door", "group": "Finestrini e tetto"}),
     ("finestrini_ventila", {"endpoint": "windowControl", "body": {"controlType": "2"},
-                   "name": "Ventila finestrini", "icon": "mdi:weather-windy", "group": "Finestrini e tetto"}),
+                   "name": "Vent windows", "icon": "mdi:weather-windy", "group": "Finestrini e tetto"}),
     ("tetto_apri",   {"endpoint": "skylightControl", "body": {"controlType": "1", "skylightType": "1"},
-                   "name": "Apri tetto", "icon": "mdi:car-select", "group": "Finestrini e tetto"}),
+                   "name": "Open sunroof", "icon": "mdi:car-select", "group": "Finestrini e tetto"}),
     ("tetto_chiudi", {"endpoint": "skylightControl", "body": {"controlType": "0", "skylightType": "1"},
-                   "name": "Chiudi tetto", "icon": "mdi:car-select", "group": "Finestrini e tetto"}),
+                   "name": "Close sunroof", "icon": "mdi:car-select", "group": "Finestrini e tetto"}),
 
     # — Ricarica EV —
     # Ricarica IMMEDIATA avvio/stop (endpoint chargeStartStopControl, bean CVChargeStartStopBean
     # → solo `controlType`; 1=avvia, 0=ferma, stessa convenzione di tutti i *Control).
     ("ricarica_start", {"endpoint": "chargeStartStopControl", "body": {"controlType": "1"},
-                   "name": "Avvia ricarica", "icon": "mdi:battery-charging", "group": "Ricarica"}),
+                   "name": "Start charging", "icon": "mdi:battery-charging", "group": "Ricarica"}),
     ("ricarica_stop", {"endpoint": "chargeStartStopControl", "body": {"controlType": "0"},
-                   "name": "Ferma ricarica", "icon": "mdi:battery-off", "group": "Ricarica"}),
+                   "name": "Stop charging", "icon": "mdi:battery-off", "group": "Ricarica"}),
     # Ricarica PROGRAMMATA (chargeAppointControl) — body con ARRAY annidato `chargeAppointPlans`
     # (la firma annidata è risolta in tsp_sign, verificata su 4/4 envelope reali). mainSwitch =
     # interruttore generale; il piano (orario/durata/giorni) lo passa l'entità via `params`.
@@ -215,16 +217,16 @@ COMMANDS = [
                    "body": {"mainSwitch": 1, "chargeAppointPlans": [
                        {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": 480,
                         "switchStatus": 1, "timeConsuming": 360}]},
-                   "name": "Ricarica programmata ON", "icon": "mdi:calendar-clock", "group": "Ricarica"}),
+                   "name": "Scheduled charging ON", "icon": "mdi:calendar-clock", "group": "Ricarica"}),
     ("ricarica_prog_off", {"endpoint": "chargeAppointControl",
                    "body": {"mainSwitch": 0, "chargeAppointPlans": [
                        {"cycleData": [1, 2, 3, 4, 5, 6, 7], "startTime": 480,
                         "switchStatus": 0, "timeConsuming": 360}]},
-                   "name": "Ricarica programmata OFF", "icon": "mdi:calendar-remove", "group": "Ricarica"}),
+                   "name": "Scheduled charging OFF", "icon": "mdi:calendar-remove", "group": "Ricarica"}),
 
     # — Altro —
     ("trova_auto", {"endpoint": "findCar", "body": {},
-                   "name": "Trova auto (lampeggio)", "icon": "mdi:car-search", "group": "Altro"}),
+                   "name": "Find car (flash lights)", "icon": "mdi:car-search", "group": "Altro"}),
     # NB: remoteStart (avvio motore da remoto) RIMOSSO: provato dal vivo (2026-06-21) →
     # l'auto risponde A00084 "No vehicle control command permission" (permesso negato per
     # questo veicolo). Inutile esporre un pulsante che fallisce sempre. Il bean
@@ -232,7 +234,7 @@ COMMANDS = [
     # Richiesta posizione GPS: NON attua nulla; l'auto risponde con un push MQTT serviceType 1301
     # (lat/lon) che il bridge cabla nel device_tracker. È il metodo dell'app per la posizione a riposo.
     ("localizza", {"endpoint": "vehicleLocation", "body": {},
-                   "name": "Localizza auto (GPS)", "icon": "mdi:crosshairs-gps", "group": "Altro"}),
+                   "name": "Locate car (GPS)", "icon": "mdi:crosshairs-gps", "group": "Altro"}),
 
     # — Sicurezza — Antifurto (theftAlarm). Avvisi+sirena per movimento non autorizzato,
     # scasso porte, rottura finestrini (descr. ufficiale app). NB: vive su /act (NON
@@ -241,10 +243,10 @@ COMMANDS = [
     # A00643 senza). Stato leggibile via query_theft_switch() (/act/theftAlarm/querySwitch).
     ("antifurto_on",  {"path": "/act/theftAlarm/setSwitch", "body": {"theftAlarmSwitch": "1"},
                    "categoria": 401,
-                   "name": "Antifurto acceso", "icon": "mdi:shield-car", "group": "Sicurezza"}),
+                   "name": "Alarm on", "icon": "mdi:shield-car", "group": "Sicurezza"}),
     ("antifurto_off", {"path": "/act/theftAlarm/setSwitch", "body": {"theftAlarmSwitch": "0"},
                    "categoria": 401,
-                   "name": "Antifurto spento", "icon": "mdi:shield-off-outline", "group": "Sicurezza"}),
+                   "name": "Alarm off", "icon": "mdi:shield-off-outline", "group": "Sicurezza"}),
 ]
 CMD_MAP = {k: v for k, v in COMMANDS}
 
@@ -282,8 +284,15 @@ class CommandError(Exception):
                    avviso. Non apre il Repair PIN e non conta per l'anti-lockout.
       - None     = altro rifiuto dell'auto (occupata, non consentito, a riposo): solo avviso."""
 
-    def __init__(self, message: str, code: str | None = None, reason: str | None = None) -> None:
+    def __init__(self, message: str | Esito, code: str | None = None,
+                 reason: str | None = None) -> None:
         super().__init__(message)
+        # [Task C] `message` può essere un `Esito` strutturato invece di una stringa già
+        # pronta: lo si tiene a parte così il coordinator può tradurlo, mentre `str(err)`
+        # (log, troncamenti, tutto ciò che oggi tratta l'eccezione come testo) continua a
+        # funzionare invariato — `Exception.__str__` chiama `str()` sul primo argomento, e
+        # `Esito.__str__` ritorna il ripiego inglese.
+        self.esito = message if isinstance(message, Esito) else None
         self.code = code
         self.reason = reason
         self.retryable = code in RETRYABLE_CODES
@@ -500,7 +509,7 @@ def get_taskid(ctx, tuid, emit=lambda m: None, force_mint=False):
         if ctx.stato.taskid and (time.time() - ctx.stato.taskid_ts) < ctx.taskid_ttl:
             return ctx.stato.taskid, "cache"
     if ctx.mint_taskid:
-        emit("conio taskId (checkPassword)…")
+        emit(Esito(EV.MINTING_TASKID, {}, "Minting taskId (checkPassword)…"))
         try:
             tid = _mint_taskid(ctx, tuid)
         except CommandError as e:
@@ -713,15 +722,18 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
         avvisa = emit
     c = CMD_MAP.get(cmd_key)
     if not c:
-        emit(f"comando sconosciuto: {cmd_key}")
-        raise CommandError(f"Comando sconosciuto: {cmd_key}")
+        esito = Esito(EV.UNKNOWN_COMMAND, {"command_key": cmd_key},
+                      f"Unknown command: {cmd_key}")
+        emit(esito)
+        raise CommandError(esito)
 
     token, tuid = wake._bff_login(ctx)
     if not token:
-        emit("login fallito (token scaduto? rifare OTP ad app chiusa)")
-        raise CommandError(
-            "Sessione scaduta — riautentica dall'avviso di Home Assistant (nuovo codice OTP)",
-            reason="reauth")
+        esito = Esito(EV.SESSION_EXPIRED, {},
+                      "Session expired — re-authenticate from the Home Assistant "
+                      "notification (new OTP code)")
+        emit(esito)
+        raise CommandError(esito, reason="reauth")
 
     # Lista permessi del veicolo: si legge UNA volta sola, qui, perché è l'unico punto in cui
     # token e tUserId sono già in mano (nessun login in più, nessun OTP). Se non si ottiene si
@@ -738,12 +750,12 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
             # P1-2 (#30): nessun taskId MA nessuna eccezione = il conio è DISATTIVATO
             # (OMODA_MINT_TASKID=0) e non c'era un taskId né in env né su file. Il PIN non
             # c'entra: dire «PIN errato» mandava l'utente a riconfigurare un PIN sano.
-            emit("nessun taskId disponibile (conio disattivato)")
-            raise CommandError(
-                "Conio del taskId disattivato (OMODA_MINT_TASKID=0) e nessun taskId "
-                "disponibile: i comandi non possono partire. Riattiva il conio automatico "
-                "per usare i pulsanti.",
-                reason="config")
+            esito = Esito(EV.TASKID_MINTING_DISABLED, {},
+                          "Automatic taskId minting is disabled (OMODA_MINT_TASKID=0) and no "
+                          "taskId is available: commands cannot go out. Re-enable automatic "
+                          "minting to use the buttons.")
+            emit(esito)
+            raise CommandError(esito, reason="config")
 
         ts = int(time.time() * 1000)
         # Estremi del clima presi dalla SCHEDA della vettura, non da costanti. Va fatto
@@ -831,7 +843,8 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
         payload = json.dumps(m, separators=(",", ":"), ensure_ascii=False).encode()
         headers = {"Authorization": token, "timestamp": str(ts),
                    "Content-Type": "application/json; charset=utf-8", "User-Agent": "okhttp/4.9.2"}
-        emit(f"invio {c['name']} (taskId:{src})…")
+        emit(Esito(EV.SENDING_COMMAND, {"command_key": cmd_key, "command": c["name"], "src": src},
+                  f"Sending {c['name']} (taskId:{src})…"))
         req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(req, timeout=20) as resp:
@@ -841,8 +854,10 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
             raw = e.read().decode("utf-8", "replace")
             status = e.code
         except Exception as e:
-            emit(f"errore rete: {e}")
-            raise CommandError(f"Errore di rete durante l'invio del comando: {e}")
+            esito_rete = Esito(EV.NETWORK_ERROR, {"error": str(e)},
+                               f"Network error while sending the command: {e}")
+            emit(esito_rete)
+            raise CommandError(esito_rete)
 
         code = None
         try:
@@ -852,30 +867,36 @@ def send(ctx, cmd_key, emit=lambda m: None, params=None, avvisa=None):
 
         # P2-5: la tabella dice se il taskId è da rifare. Al primo giro si riconia e si
         # riprova, così l'utente non vede un falso errore per un taskId semplicemente scaduto.
-        esito = routing.classifica(code, routing.CONTESTO_COMANDO)
-        if attempt == 1 and esito.riconia_taskid and ctx.mint_taskid:
+        classificazione = routing.classifica(code, routing.CONTESTO_COMANDO)
+        if attempt == 1 and classificazione.riconia_taskid and ctx.mint_taskid:
             invalidate_taskid(ctx)
-            emit("taskId non più valido → lo rinnovo e riprovo…")
+            emit(Esito(EV.TASKID_RENEWING, {},
+                      "taskId no longer valid → renewing it and retrying…"))
             continue
         break
 
-    meaning = CODE_MEANING.get(code, raw[:120])
-    out = f"{c['name']}: HTTP {status} {code or ''} — {meaning}"
+    meaning_txt = CODE_MEANING.get(code, raw[:120])
+    testo_en = f"{c['name']}: HTTP {status} {code or ''} — {meaning_txt}"
     # Una macro che silenziosamente fa sei cose su sette è peggio di un errore: l'utente
     # crede che il lunotto si stia sbrinando. Se abbiamo potato, si dice cosa manca.
     # ⚠️ Il testo finisce nello stato di `sensor.omoda9_esito_comando`, e uno stato HA non può
     # superare i 255 caratteri: oltre il limite l'entità si rompe. Si accodano al massimo due
     # nomi di campo e poi si conta, e comunque si tronca (vedi `_coda_saltati`).
     if saltati:
-        out += _coda_saltati(saltati, len(out))
-    emit(out)
+        testo_en += _coda_saltati(saltati, len(testo_en))
+    esito = Esito(EV.COMMAND_RESULT, {
+        "command_key": cmd_key, "command": c["name"], "http_status": status,
+        "code": code or "", "meaning_key": code, "meaning": meaning_txt,
+        "skipped_count": len(saltati) if saltati else 0,
+    }, testo_en)
+    emit(esito)
     # Esito reale dal `code` (il backend risponde sempre HTTP 200). Un fallimento noto =
     # comando NON eseguito → CommandError, così le entità ottimistiche annullano lo stato
     # invece di mostrare un finto successo. I codici sconosciuti restano non bloccanti per
     # prudenza: non si inventa un fallimento che il backend non ha dichiarato.
-    if esito.fallimento:
-        raise CommandError(out, code=esito.code, reason=esito.reason)
-    return out
+    if classificazione.fallimento:
+        raise CommandError(esito, code=classificazione.code, reason=classificazione.reason)
+    return esito
 
 
 def query_theft_switch(ctx):
