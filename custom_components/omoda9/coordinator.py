@@ -325,6 +325,13 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         self.poll_charging_min = int(opt.get(CONF_POLL_CHARGING, DEFAULT_POLL_CHARGING_MIN))
         # conversione di fuso del piano di ricarica (vedi CONF_CHARGE_PLAN_UTC in const.py)
         self.charge_plan_utc = bool(opt.get(CONF_CHARGE_PLAN_UTC, DEFAULT_CHARGE_PLAN_UTC))
+        # entità `time`/`number` da tenere allineate col piano letto dal cloud (registrate da
+        # loro stesse in `async_added_to_hass`, vedi `register_charge_time_entity` più sotto);
+        # `_ultimo_piano_letto` è l'impronta (startTime, timeConsuming) GREZZA dell'ultimo piano
+        # già sincronizzato, per non riscrivere le entità a ogni poll se l'auto non è cambiata.
+        self._charge_time_entity = None
+        self._charge_duration_entity = None
+        self._ultimo_piano_letto: tuple[int, int] | None = None
         # lettura del piano di ricarica programmata dal cloud (query esplicita, non solo
         # telemetria push): vedi CONF_READ_CHARGE_PLAN in const.py per il perché è un'opzione.
         self.read_charge_plan = bool(opt.get(CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN))
@@ -1471,6 +1478,77 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         from .core import commands as CMD
         return CMD.query_theft_switch(self.ctx)
 
+    # ───────────────── fuso orario del piano di ricarica (unico punto, non duplicato) ─────
+    # Prima viveva SOLO in switch.py (`Omoda9ScheduledChargeSwitch._offset_minuti` e affini).
+    # Ora serve anche a time.py/number.py (sincronizzazione col piano letto dal cloud, vedi
+    # `_sincronizza_entita_piano` sotto), quindi vive qui: un posto solo, letto da tutti e
+    # tre i file invece di essere ricopiato.
+    def _offset_fuso_piano(self) -> int:
+        """Scarto in minuti fra l'ora locale di Home Assistant e UTC, 0 se l'opzione
+        `charge_plan_utc` è spenta. Si legge dal fuso configurato in Home Assistant e NON da
+        una costante: cambia con l'ora legale, quindi un piano scritto in inverno resterebbe
+        sfasato in estate se fosse fissato una volta sola."""
+        if not self.charge_plan_utc:
+            return 0
+        offset = dt_util.now().utcoffset()
+        return int(offset.total_seconds() // 60) if offset else 0
+
+    def minuti_locali_piano(self, minuti: int) -> int:
+        """Minuti come li manda l'auto/cloud (`startTime`) → minuti da mostrare all'utente."""
+        return (minuti + self._offset_fuso_piano()) % 1440
+
+    def minuti_per_auto_piano(self, minuti: int) -> int:
+        """Minuti scelti dall'utente (entità `time`) → minuti da spedire all'auto."""
+        return (minuti - self._offset_fuso_piano()) % 1440
+
+    # ───────────────── registrazione delle entità time/number (sincronizzazione dal piano) ──
+    # Non un'iscrizione a un dispatcher HA: sono AL MASSIMO un'istanza ciascuna per veicolo,
+    # quindi un riferimento diretto basta ed è quello che gli altri "flag letti/scritti dal
+    # coordinator" del componente già fanno (vedi `poll_enabled`/`set_poll_enabled`).
+    def register_charge_time_entity(self, entity) -> None:
+        self._charge_time_entity = entity
+
+    def register_charge_duration_entity(self, entity) -> None:
+        self._charge_duration_entity = entity
+
+    def _sincronizza_entita_piano(self, plans) -> None:
+        """Il piano letto dal cloud allinea le entità `time`/`number` di configurazione,
+        SOLO quando è davvero diverso dall'ultimo che si è già visto — altrimenti ogni poll
+        (anche a piano invariato) riscriverebbe lo stato e sovrascriverebbe silenziosamente
+        un valore che l'utente ha appena scelto ma non ancora inviato.
+
+        Bug reale (2026-09-06): l'auto aveva un piano 22:10/6h, l'interruttore lo leggeva
+        correttamente nei propri attributi, ma le entità `time`/`number` restavano sul
+        default 08:00/6h — e riaccendere l'interruttore da Home Assistant avrebbe rispedito
+        quel default, cancellando il piano vero dell'utente con un solo tap.
+
+        Se le entità non sono ancora registrate (avvio: questa chiamata può arrivare prima
+        che le piattaforme `time`/`number` abbiano finito il setup) l'impronta NON si
+        aggiorna, apposta: il prossimo giro — anche a piano identico — riprova, invece di
+        perdere per sempre la sincronizzazione iniziale."""
+        if not plans or not isinstance(plans[0], dict):
+            return
+        piano = plans[0]
+        try:
+            inizio = int(piano["startTime"])
+            durata = int(piano["timeConsuming"])
+        except (KeyError, TypeError, ValueError):
+            return
+        if not (0 <= inizio < 1440):
+            return
+        firma = (inizio, durata)
+        if firma == self._ultimo_piano_letto:
+            return
+        sincronizzato = False
+        if self._charge_time_entity is not None:
+            self._charge_time_entity.set_from_car(self.minuti_locali_piano(inizio))
+            sincronizzato = True
+        if self._charge_duration_entity is not None:
+            self._charge_duration_entity.set_from_car(durata / 60)
+            sincronizzato = True
+        if sincronizzato:
+            self._ultimo_piano_letto = firma
+
     async def async_read_charge_plan(self) -> None:
         """Interroga il cloud per il piano di ricarica programmata REALE e lo scrive nello
         stesso posto da cui `switch.py` (Omoda9ScheduledChargeSwitch) già legge:
@@ -1480,7 +1558,12 @@ class Omoda9Coordinator(DataUpdateCoordinator):
 
         Spegnibile da CONF_READ_CHARGE_PLAN (opzioni): è una richiesta IN PIÙ verso il
         cloud del costruttore, non telemetria che arriva comunque. Vedi const.py per il
-        perché è un'opzione e non un comportamento fisso."""
+        perché è un'opzione e non un comportamento fisso.
+
+        Sincronizza anche le entità `time`/`number` di configurazione col piano reale (vedi
+        `_sincronizza_entita_piano`), così l'orario/durata che l'utente vede — e che
+        `Omoda9ScheduledChargeSwitch._plan()` rispedirebbe accendendo l'interruttore —
+        corrispondono a ciò che l'auto ha DAVVERO, non a un default mai aggiornato."""
         if not self.read_charge_plan:
             return
         plans = await self.hass.async_add_executor_job(self._read_charge_plan)
@@ -1493,6 +1576,7 @@ class Omoda9Coordinator(DataUpdateCoordinator):
             self._fields["chargeAppointPlans"] = plans
             fields_copy = dict(self._fields)
         self._update({"fields": fields_copy})
+        self._sincronizza_entita_piano(plans)
 
     def _read_charge_plan(self) -> list | None:
         from .core import commands as CMD

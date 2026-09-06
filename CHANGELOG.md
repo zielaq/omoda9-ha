@@ -10,6 +10,16 @@ dell'integrazione: aggiorna da **HACS → Omoda 9 / Jaecoo → Aggiorna**.
 
 ### 🇮🇹 Italiano
 
+- **L'orario e la durata della ricarica programmata ora seguono il piano vero dell'auto,
+  non un default mai aggiornato.** Bug reale (2026-09-06): l'auto aveva un piano 22:10/6h,
+  l'interruttore "Ricarica programmata" lo leggeva correttamente nei propri attributi, ma le
+  entità `time`/`number` di configurazione restavano sull'08:00/6h di default — e riaccendere
+  l'interruttore da Home Assistant avrebbe rispedito quel default, **cancellando il piano
+  vero dell'utente con un solo tap**. Ora, dopo ogni lettura del piano dal cloud, le due
+  entità si allineano al piano reale — ma solo quando è DAVVERO cambiato dall'ultima lettura,
+  per non sovrascrivere un valore che l'utente ha appena scelto e non ancora inviato.
+  L'impostazione manuale resta intatta: si può sempre scegliere un proprio orario, inviarlo
+  con l'interruttore, e la lettura successiva mostrerà ciò che l'auto ha davvero accettato.
 - **Un riavvio di Home Assistant non finge più che un comando sia partito, se non è mai
   partito.** Incidente reale (2026-09-06): premuto «Raffredda tutto», Home Assistant
   riavviato 33 secondi dopo, mentre l'interruttore stava ancora aspettando che l'auto si
@@ -57,6 +67,16 @@ dell'integrazione: aggiorna da **HACS → Omoda 9 / Jaecoo → Aggiorna**.
 
 ### 🇬🇧 English
 
+- **Scheduled-charging time and duration now follow the car's real plan, not a default that
+  was never updated.** Real bug (2026-09-06): the car had a 22:10/6h plan, the "Scheduled
+  charging" switch correctly read it in its own attributes, but the `time`/`number`
+  configuration entities stayed on the 08:00/6h default — and turning the switch back on
+  from Home Assistant would have resent that default, **wiping out the user's real plan with
+  a single tap**. Now, after every cloud read of the plan, the two entities align to the real
+  plan — but only when it actually CHANGED since the last read, so they never overwrite a
+  value the user just picked and hasn't sent yet. Manual entry still works exactly as
+  before: pick your own time, send it with the switch, and the next read shows what the car
+  really accepted.
 - **A Home Assistant restart no longer pretends a command went out if it never did.** Real
   incident (2026-09-06): "Cool everything" was pressed, Home Assistant restarted 33 seconds
   later while the switch was still waiting for the car to wake up — the real command had

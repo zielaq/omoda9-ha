@@ -697,7 +697,7 @@ class Omoda9ScheduledChargeSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEnt
             return None
         attrs: dict = {}
         try:
-            minuti = self._minuti_locali(int(piano["startTime"]))
+            minuti = self.coordinator.minuti_locali_piano(int(piano["startTime"]))
             if 0 <= minuti < 1440:
                 attrs["orario_sull_auto"] = f"{minuti // 60:02d}:{minuti % 60:02d}"
         except (KeyError, TypeError, ValueError):
@@ -719,26 +719,8 @@ class Omoda9ScheduledChargeSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEnt
             mins = int(getattr(self.coordinator, "charge_start_hour", 8) or 8) * 60
         dur_h = int(getattr(self.coordinator, "charge_duration_hours", 6) or 6)
         return {"cycleData": [1, 2, 3, 4, 5, 6, 7],
-                "startTime": self._minuti_per_auto(int(mins)),
+                "startTime": self.coordinator.minuti_per_auto_piano(int(mins)),
                 "switchStatus": switch_status, "timeConsuming": dur_h * 60}
-
-    def _offset_minuti(self) -> int:
-        """Scarto in minuti fra l'ora locale di Home Assistant e UTC, 0 se l'opzione è spenta.
-
-        Si legge dal fuso configurato in Home Assistant e NON da una costante: cambia con
-        l'ora legale, quindi un piano scritto in inverno resterebbe sfasato in estate."""
-        if not getattr(self.coordinator, "charge_plan_utc", False):
-            return 0
-        offset = dt_util.now().utcoffset()
-        return int(offset.total_seconds() // 60) if offset else 0
-
-    def _minuti_locali(self, minuti: int) -> int:
-        """Minuti letti dal cloud → minuti da mostrare all'utente."""
-        return (minuti + self._offset_minuti()) % 1440
-
-    def _minuti_per_auto(self, minuti: int) -> int:
-        """Minuti scelti dall'utente → minuti da spedire al cloud."""
-        return (minuti - self._offset_minuti()) % 1440
 
     async def async_turn_on(self, **kwargs) -> None:
         await self._run_command("ricarica_prog_on", True,

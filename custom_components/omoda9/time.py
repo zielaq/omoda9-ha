@@ -62,6 +62,16 @@ class Omoda9ConfigTime(Omoda9Entity, TimeEntity, RestoreEntity):
             except (ValueError, TypeError):
                 pass
         self._push()
+        # Solo l'orario di ricarica programmata si allinea al piano letto dal cloud (vedi
+        # `Omoda9Coordinator._sincronizza_entita_piano`): un'eventuale altra entità `time` di
+        # configurazione futura non ha nulla a che fare col piano di ricarica.
+        if self._attr == "charge_start_minutes":
+            self.coordinator.register_charge_time_entity(self)
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._attr == "charge_start_minutes":
+            self.coordinator.register_charge_time_entity(None)
+        await super().async_will_remove_from_hass()
 
     def _push(self) -> None:
         setattr(self.coordinator, self._attr, self._value.hour * 60 + self._value.minute)
@@ -73,5 +83,21 @@ class Omoda9ConfigTime(Omoda9Entity, TimeEntity, RestoreEntity):
     async def async_set_value(self, value: time) -> None:
         # i secondi non servono (l'auto ragiona in minuti) → li azzeriamo
         self._value = value.replace(second=0, microsecond=0)
+        self._push()
+        self.async_write_ha_state()
+
+    def set_from_car(self, minuti: int) -> None:
+        """Il piano letto dal cloud ha un orario diverso da quello mostrato: ci si allinea.
+
+        NON passa da `async_set_value`: quel metodo è il percorso "l'utente ha scelto
+        questo", chiamato dal frontend quando si preme sul selettore. Questo è il percorso
+        "l'auto ha detto questo" (`Omoda9Coordinator._sincronizza_entita_piano`), e i due
+        vanno tenuti distinti anche se l'effetto sull'entità è lo stesso — un domani in cui
+        uno dei due debba comportarsi diversamente (per esempio: avvisare l'utente) non deve
+        ricordarsi di separarli a quel punto."""
+        nuovo = time(hour=minuti // 60, minute=minuti % 60)
+        if nuovo == self._value:
+            return
+        self._value = nuovo
         self._push()
         self.async_write_ha_state()

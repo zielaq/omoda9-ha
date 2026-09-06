@@ -64,6 +64,16 @@ class Omoda9ConfigNumber(Omoda9Entity, RestoreNumber):
         if last is not None and last.native_value is not None:
             self._value = float(last.native_value)
         self._push()
+        # Solo la durata della ricarica programmata si allinea al piano letto dal cloud
+        # (vedi `Omoda9Coordinator._sincronizza_entita_piano`): la durata clima non c'entra
+        # col piano di ricarica.
+        if self._attr == "charge_duration_hours":
+            self.coordinator.register_charge_duration_entity(self)
+
+    async def async_will_remove_from_hass(self) -> None:
+        if self._attr == "charge_duration_hours":
+            self.coordinator.register_charge_duration_entity(None)
+        await super().async_will_remove_from_hass()
 
     def _push(self) -> None:
         # mantieni il valore come int quando è intero (orari/giorni), così i body comando
@@ -77,5 +87,18 @@ class Omoda9ConfigNumber(Omoda9Entity, RestoreNumber):
 
     async def async_set_native_value(self, value: float) -> None:
         self._value = float(value)
+        self._push()
+        self.async_write_ha_state()
+
+    def set_from_car(self, value: float) -> None:
+        """Il piano letto dal cloud ha una durata diversa da quella mostrata: ci si allinea.
+
+        NON passa da `async_set_native_value` per lo stesso motivo spiegato in
+        `Omoda9ConfigTime.set_from_car` (time.py): "l'utente ha scelto" e "l'auto ha detto"
+        restano due percorsi distinti anche quando l'effetto sull'entità è identico."""
+        arrotondato = round(float(value), 1)
+        if arrotondato == self._value:
+            return
+        self._value = arrotondato
         self._push()
         self.async_write_ha_state()

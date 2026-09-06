@@ -116,6 +116,15 @@ def switch_ricarica(core):
         data: dict = {"fields": {}}
         config_entry = None
 
+        # Il fuso del piano è compito del coordinator (vedi Omoda9Coordinator
+        # minuti_locali_piano/minuti_per_auto_piano): qui l'opzione è spenta, quindi
+        # identità pura, esattamente come prima che la conversione esistesse.
+        def minuti_locali_piano(self, minuti: int) -> int:
+            return minuti % 1440
+
+        def minuti_per_auto_piano(self, minuti: int) -> int:
+            return minuti % 1440
+
     s = Omoda9ScheduledChargeSwitch.__new__(Omoda9ScheduledChargeSwitch)
     s.coordinator = CoordFinto()
     return s
