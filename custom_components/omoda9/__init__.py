@@ -125,6 +125,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # config flow la salvasse: in background, così un eventuale reload avviene a setup finito.
         hass.async_create_background_task(
             coordinator.async_ensure_vehicle_identity(), "omoda9_vehicle_identity")
+        # [feat/charge-plan-query] lettura del piano di ricarica ALL'AVVIO, non solo a fine
+        # ciclo di poll. Senza questa, dopo un riavvio di Home Assistant l'interruttore
+        # "Ricarica programmata" resta `unknown` fino al primo poll (di norma un'ora), e
+        # l'utente vede uno stato mancante pur avendo un piano attivo sull'auto. È una sola
+        # chiamata in lettura, la stessa che il poll fa comunque, e rispetta l'opzione
+        # `read_charge_plan` (dentro `async_read_charge_plan` c'è già la guardia).
+        hass.async_create_background_task(
+            coordinator.async_read_charge_plan(), "omoda9_charge_plan_startup")
     except Exception:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
         await hass.async_add_executor_job(coordinator.async_stop)
