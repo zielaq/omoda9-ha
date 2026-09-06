@@ -142,6 +142,9 @@ async def test_opzione_disattivata_non_chiama_mai_il_cloud(hass, integrazione_av
     una richiesta verso il backend — è la garanzia che l'opzione dà a chi la spegne."""
     coord = _coordinator(hass, integrazione_avviata)
     coord.read_charge_plan = False
+    # l'avvio dell'entry fa già una lettura (task in background): qui interessa solo ciò
+    # che succede DOPO aver spento l'opzione, quindi si azzera il contatore.
+    cloud.reset_calls()
     cloud.on("/asd/chargeAppointManage/chargeAppointQuery",
              response={"code": "000000", "body": {"chargeAppointPlans": PIANO_DAL_CLOUD}})
 

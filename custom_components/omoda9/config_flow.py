@@ -46,6 +46,7 @@ from .const import (
     DEFAULT_POLL_NORMAL_MIN, DEFAULT_POLL_CHARGING_MIN,
     CONF_VEHICLE_NAME,
     CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN,
+    CONF_CHARGE_PLAN_UTC, DEFAULT_CHARGE_PLAN_UTC,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -940,6 +941,12 @@ class Omoda9OptionsFlow(config_entries.OptionsFlow):
             vol.Optional(
                 CONF_READ_CHARGE_PLAN,
                 default=opt.get(CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN),
+            ): bool,
+            # Il piano letto dal cloud è in minuti da mezzanotte, ma non è dimostrato se in
+            # ora locale o UTC (vedi CONF_CHARGE_PLAN_UTC in const.py). Spento = come prima.
+            vol.Optional(
+                CONF_CHARGE_PLAN_UTC,
+                default=opt.get(CONF_CHARGE_PLAN_UTC, DEFAULT_CHARGE_PLAN_UTC),
             ): bool,
             # override manuale del nome del veicolo (vuoto = usa quello rilevato dall'auto)
             vol.Optional(

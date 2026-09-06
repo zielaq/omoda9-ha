@@ -44,6 +44,7 @@ from .const import (
     CONF_POLL_NORMAL, CONF_POLL_CHARGING, DEFAULT_POLL_NORMAL_MIN,
     DEFAULT_POLL_CHARGING_MIN, POLL_WAKE_WAIT, COMMAND_SETTLE_S, COMMAND_QUEUE_WAIT,
     CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN, CHARGE_PLAN_READ_DELAY_S,
+    CONF_CHARGE_PLAN_UTC, DEFAULT_CHARGE_PLAN_UTC,
     HV_ON_POLL_EVERY, HV_ON_POLL_MAX,
     CHARGING_POLL_EVERY, CHARGING_POLL_MAX, DRIVE_WATCH_EVERY,
     CONF_VEHICLE_NAME, DATA_VEHICLE_MODEL, DATA_VEHICLE_BRAND,
@@ -322,6 +323,8 @@ class Omoda9Coordinator(DataUpdateCoordinator):
         opt = entry.options or {}
         self.poll_normal_min = int(opt.get(CONF_POLL_NORMAL, DEFAULT_POLL_NORMAL_MIN))
         self.poll_charging_min = int(opt.get(CONF_POLL_CHARGING, DEFAULT_POLL_CHARGING_MIN))
+        # conversione di fuso del piano di ricarica (vedi CONF_CHARGE_PLAN_UTC in const.py)
+        self.charge_plan_utc = bool(opt.get(CONF_CHARGE_PLAN_UTC, DEFAULT_CHARGE_PLAN_UTC))
         # lettura del piano di ricarica programmata dal cloud (query esplicita, non solo
         # telemetria push): vedi CONF_READ_CHARGE_PLAN in const.py per il perché è un'opzione.
         self.read_charge_plan = bool(opt.get(CONF_READ_CHARGE_PLAN, DEFAULT_READ_CHARGE_PLAN))

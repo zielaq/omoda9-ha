@@ -305,6 +305,25 @@ DEFAULT_READ_CHARGE_PLAN = True
 # accettato subito dal backend, ma il piano che poi restituisce chargeAppointQuery impiega
 # qualche secondo a riflettere il cambiamento appena inviato.
 CHARGE_PLAN_READ_DELAY_S = 20
+
+# Fuso orario del piano di ricarica (`startTime`, minuti da mezzanotte).
+#
+# Aperto: non è dimostrato se il cloud memorizzi l'ora LOCALE dell'auto o UTC. Il commento
+# storico in switch.py dice «locale, misurato scrivendo startTime=0 e leggendo 00:00
+# nell'app», ma quella misura è stata fatta in un fuso a +2 come il nostro: se il cloud
+# fosse UTC e l'app riconvertisse, il risultato sarebbe identico e la prova non
+# distinguerebbe i due casi.
+#
+# Misura del 2026-09-06 (auto del proprietario, Polonia, UTC+2): il proprietario dichiara
+# di aver impostato 22:10 sullo schermo dell'auto; il cloud restituisce startTime=1210,
+# cioè 20:10 — esattamente lo scarto del fuso. Indizio, non prova: manca la conferma
+# diretta sullo schermo dell'auto.
+#
+# Finché la prova non c'è, l'opzione resta SPENTA: comportamento identico a prima. Chi
+# verifica sulla propria auto che l'ora mostrata è avanti rispetto a Home Assistant la
+# accende, e la conversione avviene in ENTRAMBE le direzioni (lettura e scrittura).
+CONF_CHARGE_PLAN_UTC = "charge_plan_utc"
+DEFAULT_CHARGE_PLAN_UTC = False
 # Alta tensione (HV) e telemetria FRESCA. Scoperta verificata dal vivo 2026-06-22: il canale
 # /asr/manager/realtime riporta odometro/SOC/tensione/corrente VERI solo quando l'alta tensione
 # è accesa (hVoltageState=1: marcia, ricarica o clima acceso); ad HV spento ritorna uno snapshot
