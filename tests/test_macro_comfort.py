@@ -220,14 +220,23 @@ async def test_ripristino_riarma_la_scadenza(hass, config_entry, cloud, monkeypa
     Prima la scadenza viveva solo in memoria e il ripristino non la riarmava → dopo un
     riavvio di HA (o un aggiornamento HACS) l'interruttore restava acceso a tempo
     indeterminato. Verificato dal vivo il 2026-08-10: entry ricaricata alle 16:57 con la
-    macro accesa, alle 17:16 era ancora accesa mentre l'auto aveva chiuso il preset."""
-    from pytest_homeassistant_custom_component.common import mock_restore_cache
+    macro accesa, alle 17:16 era ancora accesa mentre l'auto aveva chiuso il preset.
+
+    `extra_data={"confirmed": True}`: dopo la correzione del 2026-09-06 (Task A) un "on"
+    ripristinato SENZA questo marcatore torna sconosciuto invece che acceso — vedi
+    `Omoda9ConfirmedRestoreData` in entity.py. Qui si simula il caso in cui l'ultima cosa
+    vista prima dello spegnimento era stata confermata (spegnimento per scadenza/telemetria,
+    non una pressione mai verificata), quindi il ripristino della scadenza residua resta
+    testato per il caso in cui è davvero applicabile."""
+    from pytest_homeassistant_custom_component.common import mock_restore_cache_with_extra_data
 
     acceso_da = dt_util.utcnow() - timedelta(seconds=MACRO_PRESET_S - 120)   # restano 2 min
     finito = dt_util.utcnow() - timedelta(seconds=MACRO_PRESET_S + 60)       # già scaduto
-    mock_restore_cache(hass, (
-        State(MACRO, "on", last_changed=acceso_da, last_updated=acceso_da),
-        State("switch.omoda9_riscalda_tutto", "on", last_changed=finito, last_updated=finito),
+    mock_restore_cache_with_extra_data(hass, (
+        (State(MACRO, "on", last_changed=acceso_da, last_updated=acceso_da),
+         {"confirmed": True}),
+        (State("switch.omoda9_riscalda_tutto", "on", last_changed=finito, last_updated=finito),
+         {"confirmed": True}),
     ))
 
     await _avvia(hass, config_entry, monkeypatch)
@@ -368,12 +377,17 @@ async def test_riavvio_con_preset_gia_chiuso_dallauto(hass, config_entry, cloud,
     È il caso che il riarmo della scadenza da solo non copre: HA riparte, l'interruttore
     si ripristina acceso con dieci minuti ancora da correre, ma l'auto nel frattempo ha già
     chiuso tutto. Nella nuova esecuzione non c'è alcun invio da proteggere, quindi il primo
-    messaggio che dice «clima spento» vale."""
-    from pytest_homeassistant_custom_component.common import mock_restore_cache
+    messaggio che dice «clima spento» vale.
+
+    `extra_data={"confirmed": True}`: vedi il commento in `test_ripristino_riarma_la_scadenza`
+    sul perché serve, dopo la correzione del 2026-09-06 (Task A)."""
+    from pytest_homeassistant_custom_component.common import mock_restore_cache_with_extra_data
 
     acceso_da = dt_util.utcnow() - timedelta(seconds=60)
-    mock_restore_cache(hass, (State(MACRO, "on", last_changed=acceso_da,
-                                    last_updated=acceso_da),))
+    mock_restore_cache_with_extra_data(hass, (
+        (State(MACRO, "on", last_changed=acceso_da, last_updated=acceso_da),
+         {"confirmed": True}),
+    ))
     await _avvia(hass, config_entry, monkeypatch)
     assert hass.states.get(MACRO).state == "on"
 

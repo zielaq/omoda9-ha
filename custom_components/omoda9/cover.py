@@ -60,7 +60,10 @@ class Omoda9Cover(Omoda9OptimisticMixin, Omoda9Entity, CoverEntity, RestoreEntit
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None and last.state in ("open", "closed"):
-            self._restored = last.state == "closed"
+            self._restored = await self._restore_confirmed_value(last.state == "closed")
+
+    def _live_confirm(self) -> bool | None:
+        return self._live_closed()
 
     def _live_closed(self) -> bool | None:
         fields = self.coordinator.data.get("fields", {})

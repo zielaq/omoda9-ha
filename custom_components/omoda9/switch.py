@@ -139,10 +139,15 @@ class Omoda9ComfortSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, Res
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None and last.state in ("on", "off"):
-            self._restored = last.state == "on"
+            # Task A: solo un valore CONFERMATO dalla telemetria al momento del salvataggio
+            # sopravvive al riavvio — vedi Omoda9OptimisticMixin._restore_confirmed_value.
+            self._restored = await self._restore_confirmed_value(last.state == "on")
 
     def _live_on(self) -> bool | None:
         return field_on(self.coordinator.data.get("fields", {}).get(self._field))
+
+    def _live_confirm(self) -> bool | None:
+        return self._live_on()
 
     @property
     def is_on(self) -> bool | None:
@@ -179,7 +184,13 @@ class Omoda9ChargeSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, Rest
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None and last.state in ("on", "off"):
-            self._restored = last.state == "on"
+            # Task A: questa entità NON ha alcun campo di telemetria (l'auto non pubblica
+            # "in carica ora") → il suo valore non è MAI confermabile, e infatti
+            # `_live_confirm` (ereditato, non sovrascritto qui) resta sempre None. Di
+            # conseguenza `_restore_confirmed_value` non ripristinerà mai nulla: dopo un
+            # riavvio questo interruttore parte sempre "sconosciuto", onestamente, invece
+            # di continuare a mostrare un ottimismo che nessuno ha mai verificato.
+            self._restored = await self._restore_confirmed_value(last.state == "on")
 
     @property
     def is_on(self) -> bool | None:
@@ -269,6 +280,11 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
         self._off_cmd = off_cmd
         self._attr_icon = icon
         self._restored: bool | None = None
+        # Task A/B: questa macro non ha un campo live diretto (vedi `_is_confirmed`
+        # sovrascritto sotto) — tiene un proprio flag, vero SOLO quando l'ultimo `_set_state`
+        # veniva da una correzione della telemetria o dalla scadenza del preset, mai da una
+        # pressione dell'utente ancora da confermare.
+        self._confirmed: bool = False
         self._expire_unsub = None
         self._expire_at: float | None = None   # scadenza monotona del preset in corso
         self._msg_visto = None                 # `last_seen` dell'ultimo messaggio già valutato
@@ -282,7 +298,16 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
         last = await self.async_get_last_state()
         if last is None or last.state not in ("on", "off"):
             return
-        self._restored = last.state == "on"
+        # Task A: questa macro non conferma MAI "acceso" dalla telemetria (la correzione è a
+        # senso unico, vedi `_spento_dall_auto`): l'unico valore che può sopravvivere a un
+        # riavvio come "confermato" è uno spegnimento già visto dalla telemetria o deciso
+        # dalla scadenza del preset. Un "acceso" salvato da una pressione mai confermata
+        # torna sconosciuto — è esattamente l'incidente del 2026-09-06.
+        restored = await self._restore_confirmed_value(last.state == "on")
+        if restored is None:
+            return
+        self._restored = restored
+        self._confirmed = True
         if not self._restored:
             return
         # Il preset ha una fine, e quella fine non deve morire col riavvio. Ripristinare lo
@@ -308,6 +333,15 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
         if self._opt_value is not None:
             return self._opt_value
         return bool(self._restored)
+
+    def _is_confirmed(self) -> bool:
+        """Sovrascrive il default del mixin: questa macro non ha un `_live_confirm` (nessun
+        campo dice "il preset è attivo" — solo una correzione a senso unico che lo SPEGNE,
+        vedi `_spento_dall_auto`), quindi tiene il proprio flag invece di ricalcolarlo da un
+        campo live che non esiste."""
+        if self._opt_value is not None:
+            return False
+        return self._confirmed
 
     def _handle_coordinator_update(self) -> None:
         # NON si azzera lo stato sui messaggi telemetria (il mixin lo farebbe, ancorandosi a
@@ -400,7 +434,8 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
         if not self._preset_finito(dati.get("msg_fields") or {}):
             return
         self._cancel_expire()
-        self._set_state(False)
+        # confirmed=True: è la TELEMETRIA a dirlo (clima spento), non una nostra supposizione.
+        self._set_state(False, confirmed=True)
 
     def _entro_la_grazia(self) -> bool:
         """Vero se il nostro ultimo comando è troppo recente perché l'auto abbia già agito."""
@@ -431,7 +466,11 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
         """L'auto ha chiuso il preset da sola: l'interruttore la segue."""
         self._expire_unsub = None
         self._expire_at = None
-        self._set_state(False)
+        # confirmed=True: non è una pressione dell'utente da verificare — è la NOSTRA
+        # scadenza che decide, in modo deterministico, che il preset è finito. Al contrario
+        # di un "acceso" appena premuto, questo "spento" non ha bisogno della telemetria per
+        # essere affidabile: è la direzione sicura (mai un falso "sta ancora agendo").
+        self._set_state(False, confirmed=True)
 
     def _resto_scadenza(self) -> float | None:
         """Secondi che mancano all'auto-spegnimento, o None se nessun preset è in corso."""
@@ -453,9 +492,15 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
                           f"Waking the car: command goes out in ~{s} s"})
 
     @callback
-    def _set_state(self, value: bool) -> None:
+    def _set_state(self, value: bool, *, confirmed: bool = False) -> None:
+        """`confirmed=True` SOLO quando chi chiama ha una prova più solida della semplice
+        pressione dell'utente — telemetria (`_spento_dall_auto`) o la nostra scadenza
+        deterministica (`_scaduto`). Il default `False` copre la pressione stessa e il
+        ripristino dopo un invio fallito: un comando appena chiesto non è ancora un fatto,
+        è un'intenzione — vedi Task A/`Omoda9ConfirmedRestoreData`."""
         self._set_optimistic(value)
         self._restored = value
+        self._confirmed = confirmed
 
     async def _wake_then(self, cmd: str, target: bool) -> None:
         """Sveglia l'auto SE dorme, attende che i moduli comfort siano alimentati, poi invia
@@ -489,6 +534,7 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
         # Stato da cui ripartire se il comando non parte: NON si assume «spento» (vedi il
         # `finally` in fondo).
         prima_on = bool(self.is_on)
+        prima_confirmed = self._confirmed
         prima_resto = self._resto_scadenza()
         self._cancel_expire()
         self._set_state(target)
@@ -540,7 +586,7 @@ class Omoda9ClimaMacroSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
                     # lasciava l'interruttore su OFF mentre l'auto continuava il preset, e
                     # un'accensione fallita su una macro già accesa la spegneva in Home
                     # Assistant senza che l'auto ne sapesse nulla.
-                    self._set_state(prima_on)
+                    self._set_state(prima_on, confirmed=prima_confirmed)
                     if prima_on and prima_resto:
                         self._arma_scadenza(prima_resto)
 
@@ -588,7 +634,7 @@ class Omoda9ScheduledChargeSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEnt
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None and last.state in ("on", "off"):
-            self._restored = last.state == "on"
+            self._restored = await self._restore_confirmed_value(last.state == "on")
 
     def _live_on(self) -> bool | None:
         raw = self.coordinator.data.get("fields", {}).get("chargeAppointPlans")
@@ -601,6 +647,9 @@ class Omoda9ScheduledChargeSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEnt
         except (ValueError, SyntaxError, AttributeError, IndexError, TypeError):
             return None
         return None
+
+    def _live_confirm(self) -> bool | None:
+        return self._live_on()
 
     @property
     def is_on(self) -> bool | None:
@@ -729,7 +778,7 @@ class Omoda9TheftAlarmSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None and last.state in ("on", "off"):
-            self._restored = last.state == "on"
+            self._restored = await self._restore_confirmed_value(last.state == "on")
         # seed dello stato reale dal backend (read-only, best-effort: non deve rompere il setup)
         try:
             v = await self.coordinator.async_query_theft()
@@ -738,6 +787,9 @@ class Omoda9TheftAlarmSwitch(Omoda9OptimisticMixin, Omoda9Entity, SwitchEntity, 
                 self.async_write_ha_state()
         except Exception:  # noqa: BLE001
             pass
+
+    def _live_confirm(self) -> bool | None:
+        return self._real
 
     @property
     def is_on(self) -> bool | None:

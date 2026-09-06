@@ -38,13 +38,16 @@ class Omoda9Lock(Omoda9OptimisticMixin, Omoda9Entity, LockEntity, RestoreEntity)
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None and last.state in ("locked", "unlocked"):
-            self._restored = last.state == "locked"
+            self._restored = await self._restore_confirmed_value(last.state == "locked")
 
     def _live_locked(self) -> bool | None:
         # doorLock: 0 = Bloccata, !=0 = Sbloccata → locked = NOT field_on (allineato
         # a binary/switch/cover, "0.0" incluso). field_on None = campo assente.
         on = field_on(self.coordinator.data.get("fields", {}).get("doorLock"))
         return None if on is None else not on
+
+    def _live_confirm(self) -> bool | None:
+        return self._live_locked()
 
     @property
     def is_locked(self) -> bool | None:

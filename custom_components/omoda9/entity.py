@@ -10,9 +10,12 @@ HA slugifica il solo nome). Dove il bridge usa un id non derivabile dal nome
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
+from typing import Any
 
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.restore_state import ExtraStoredData
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
@@ -147,6 +150,28 @@ class Omoda9Entity(CoordinatorEntity[Omoda9Coordinator]):
         )
 
 
+@dataclass
+class Omoda9ConfirmedRestoreData(ExtraStoredData):
+    """Accompagna lo stato salvato di un attuatore ottimistico: dice se quel valore, nel
+    momento in cui è stato scritto su disco, era CONFERMATO dalla telemetria (o da una
+    lettura equivalente della verità sull'auto — es. `querySwitch` per l'antifurto) oppure
+    era ancora solo l'intenzione dell'utente, mai arrivata all'auto o mai confermata da
+    essa.
+
+    Nato da un incidente reale (2026-09-06, istanza dell'utente): premuto "Raffredda
+    tutto" alle 18:42:54, Home Assistant riavviato alle 18:43:27 — 33 secondi dopo, mentre
+    l'interruttore stava ancora aspettando che l'auto si svegliasse (`MACRO_WAKE_WAIT`),
+    quindi il comando vero non era MAI partito. Al riavvio (18:44:58) `RestoreEntity` ha
+    rimesso l'interruttore su ON, e ci è rimasto 3 minuti e mezzo, finché la telemetria non
+    l'ha smentito. Senza questo flag, `RestoreEntity` non ha modo di sapere se il valore che
+    sta salvando è un fatto o solo una speranza — vedi `Omoda9OptimisticMixin._is_confirmed`."""
+
+    confirmed: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        return {"confirmed": self.confirmed}
+
+
 class Omoda9OptimisticMixin:
     """Stato ottimistico per gli attuatori (lock/switch/cover).
 
@@ -248,3 +273,73 @@ class Omoda9OptimisticMixin:
         if self._opt_value is not None and (self._verita_arrivata() or self._ottimismo_scaduto()):
             self._clear_optimistic()
         super()._handle_coordinator_update()
+
+    # ───────────────── Task A/B: stato confermato vs. solo ottimismo ─────────────────
+    # Un valore "confermato" è appoggiato alla telemetria (o a una lettura equivalente
+    # della verità sull'auto, come querySwitch per l'antifurto), non al solo ottimismo
+    # dell'utente. Serve a due cose: (A) decidere cosa sopravvive a un riavvio di Home
+    # Assistant (vedi `extra_restore_state_data`/`_restore_confirmed_value`), e (B)
+    # `assumed_state`, che dice onestamente all'interfaccia "non so come sta messa
+    # davvero l'auto" finché la telemetria non parla.
+
+    def _live_confirm(self) -> bool | None:
+        """Il valore "live" di QUESTA entità, se ne ha uno (telemetria/lettura reale).
+
+        Default: nessuno (entità come Omoda9ChargeSwitch, che non ha alcun campo di stato
+        e vive SOLO di ottimismo + ripristino — quindi non può mai essere "confermata").
+        Le sottoclassi con un campo reale la sovrascrivono per restituirlo (es. `_live_on`,
+        `_live_locked`, `_live_closed`, `_real`)."""
+        return None
+
+    def _is_confirmed(self) -> bool:
+        """Vero se il valore che `is_on`/`is_locked`/`is_closed` riporterebbe ORA viene
+        dalla telemetria, non dall'ottimismo in corso. Un ottimismo ancora attivo non è
+        MAI confermato per definizione, anche se il campo live esiste: è proprio il
+        periodo in cui non sappiamo ancora se l'auto ha eseguito.
+
+        `Omoda9ClimaMacroSwitch` sovrascrive questo metodo (non `_live_confirm`): il suo
+        stato non ha MAI un campo live diretto — solo una correzione a senso unico dalla
+        telemetria — quindi tiene un proprio flag `_confirmed` invece di ricalcolarlo qui."""
+        if self._opt_value is not None:
+            return False
+        return self._live_confirm() is not None
+
+    @property
+    def assumed_state(self) -> bool:
+        """Task B: quando il valore mostrato non è confermato (ottimismo in corso, o un
+        ripristino che Task A ha lasciato sconosciuto), lo si dice onestamente. Home
+        Assistant disegna allora due pulsanti separati invece di un interruttore unico —
+        il modo nativo di HA di dire "non so come sta messa davvero l'auto" — e torna al
+        controllo normale non appena la telemetria conferma."""
+        return not self._is_confirmed()
+
+    @property
+    def extra_restore_state_data(self) -> Omoda9ConfirmedRestoreData:
+        """Task A: il valore che RestoreEntity scrive su disco porta con sé se ERA
+        confermato in quel momento. Senza questo, un riavvio durante un ottimismo mai
+        confermato (l'incidente del 2026-09-06: comando mai partito verso l'auto) restituiva
+        "acceso" per un'azione che l'auto non aveva mai visto — vedi `Omoda9ConfirmedRestoreData`."""
+        return Omoda9ConfirmedRestoreData(confirmed=self._is_confirmed())
+
+    async def _restore_confirmed_value(self, value: bool) -> bool | None:
+        """`value` è lo stato salvato, già tradotto in bool dal chiamante (il significato di
+        "on"/"locked"/"closed" cambia da piattaforma a piattaforma). Ritorna quel valore
+        SOLO se era confermato al momento del salvataggio; altrimenti None (sconosciuto:
+        `is_on` eccetera cadranno su `_restored is None` → stato "unknown" in HA, mai un
+        "acceso" inventato).
+
+        Nessun dato extra salvato (entità mai aggiornata a questa versione, o prima
+        installazione) → tratta come NON confermato: fail-safe nella direzione sicura, non
+        un errore — non sapere se un valore vecchio era confermato non deve valere come
+        "sì"."""
+        try:
+            extra = await self.async_get_last_extra_data()
+        except Exception:  # noqa: BLE001 — un dato extra illeggibile non deve rompere l'avvio
+            return None
+        if extra is None:
+            return None
+        try:
+            confermato = bool(extra.as_dict().get("confirmed"))
+        except Exception:  # noqa: BLE001
+            confermato = False
+        return value if confermato else None
