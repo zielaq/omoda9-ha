@@ -411,7 +411,13 @@
         "name": "Partenza programmata"
       },
       "presa_ricarica_rapida": {
-        "name": "Presa ricarica rapida"
+        "name": "Presa ricarica rapida",
+        "state": {
+          "disconnected": "Scollegata",
+          "connected": "Collegata",
+          "connected_fast": "Collegata (ricarica rapida)",
+          "unknown_code": "Codice sconosciuto"
+        }
       },
       "pressione_gomma_ant_dx": {
         "name": "Pressione gomma ant. DX"
@@ -426,13 +432,25 @@
         "name": "Pressione gomma post. SX"
       },
       "ricarica_programmata_stato": {
-        "name": "Stato ricarica programmata"
+        "name": "Stato ricarica programmata",
+        "state": {
+          "off": "Disattivata",
+          "on": "Attiva",
+          "running": "In esecuzione",
+          "unknown_code": "Codice sconosciuto"
+        }
       },
       "riscaldamento_sedile_post_centrale": {
         "name": "Riscaldamento sedile post. centrale"
       },
       "stato_ricarica": {
-        "name": "Stato ricarica"
+        "name": "Stato ricarica",
+        "state": {
+          "not_charging": "Non in ricarica",
+          "charging": "In ricarica",
+          "complete": "Ricarica completata",
+          "unknown_code": "Codice sconosciuto"
+        }
       },
       "stato_sessione": {
         "name": "Stato sessione"

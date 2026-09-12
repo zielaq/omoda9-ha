@@ -411,7 +411,13 @@
         "name": "Scheduled departure"
       },
       "presa_ricarica_rapida": {
-        "name": "Fast charging port"
+        "name": "Fast charging port",
+        "state": {
+          "disconnected": "Disconnected",
+          "connected": "Connected",
+          "connected_fast": "Connected (fast charging)",
+          "unknown_code": "Unknown code"
+        }
       },
       "pressione_gomma_ant_dx": {
         "name": "Tire pressure front right"
@@ -426,13 +432,25 @@
         "name": "Tire pressure rear left"
       },
       "ricarica_programmata_stato": {
-        "name": "Scheduled charging status"
+        "name": "Scheduled charging status",
+        "state": {
+          "off": "Off",
+          "on": "On",
+          "running": "Running",
+          "unknown_code": "Unknown code"
+        }
       },
       "riscaldamento_sedile_post_centrale": {
         "name": "Rear center seat heating"
       },
       "stato_ricarica": {
-        "name": "Charging status"
+        "name": "Charging status",
+        "state": {
+          "not_charging": "Not charging",
+          "charging": "Charging",
+          "complete": "Charging complete",
+          "unknown_code": "Unknown code"
+        }
       },
       "stato_sessione": {
         "name": "Session status"

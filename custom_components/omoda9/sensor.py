@@ -110,9 +110,13 @@ class _RtSpec:
 # (auto parcheggiata non in carica). La semantica di 1/2 segue la convenzione EV;
 # qualunque codice non previsto resta leggibile come "Sconosciuto (N)" (vedi
 # Omoda9RealtimeSensor._live_value) → nessuna informazione persa, nessun valore inventato.
-CHARGE_STATE_MAP = {"0": "Non in ricarica", "1": "In ricarica", "2": "Ricarica completata"}
-APPT_CHARGE_STATE_MAP = {"0": "Disattivata", "1": "Attiva", "2": "In esecuzione"}
-FAST_GUN_MAP = {"0": "Scollegata", "1": "Collegata", "2": "Collegata (ricarica rapida)"}
+# I valori sono CHIAVI di stato (device_class ENUM): il testo che l'utente vede arriva
+# da translations/*.json (`entity.sensor.<key>.state`), quindi automazioni e dashboard
+# confrontano una chiave stabile ("charging") e non una frase in una lingua sola.
+CHARGE_STATE_MAP = {"0": "not_charging", "1": "charging", "2": "complete"}
+APPT_CHARGE_STATE_MAP = {"0": "off", "1": "on", "2": "running"}
+FAST_GUN_MAP = {"0": "disconnected", "1": "connected", "2": "connected_fast"}
+ENUM_UNKNOWN = "unknown_code"  # codice non previsto: resta visibile (raw in attributo)
 
 
 # Nomi alternativi dell'autonomia elettrica: la PHEV manda `pureElectricRange`, una BEV
@@ -710,6 +714,23 @@ class Omoda9RealtimeSensor(_Omoda9RestoreSensor):
             self._attr_suggested_display_precision = spec.precision
         if spec.diag:
             self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        if spec.vmap is not None:
+            self._attr_device_class = SensorDeviceClass.ENUM
+            self._attr_options = [*spec.vmap.values(), ENUM_UNKNOWN]
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        # Enum: uno stato ripristinato fuori da `options` (es. il vecchio testo italiano
+        # salvato prima di questa versione) farebbe fallire la validazione di HA → scartalo.
+        if self._spec.vmap is not None and self._restored not in self._attr_options:
+            self._restored = None
+
+    @property
+    def extra_state_attributes(self) -> dict | None:
+        # Solo per gli enum: il codice grezzo, così un valore nuovo non va perso.
+        if self._spec.vmap is None:
+            return None
+        return {"raw_code": _rt(self.coordinator, self._spec.field)}
 
     @property
     def native_value(self):
@@ -732,7 +753,7 @@ class Omoda9RealtimeSensor(_Omoda9RestoreSensor):
             return None
         if self._spec.vmap is not None:
             key = raw[:-2] if raw.endswith(".0") else raw  # "0.0" → "0"
-            return self._spec.vmap.get(key, f"Sconosciuto ({raw})")
+            return self._spec.vmap.get(key, ENUM_UNKNOWN)
         if not self._spec.numeric:
             return raw
         try:

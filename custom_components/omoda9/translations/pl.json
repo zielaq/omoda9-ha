@@ -411,7 +411,13 @@
         "name": "Zaplanowany wyjazd"
       },
       "presa_ricarica_rapida": {
-        "name": "Gniazdo szybkiego ładowania"
+        "name": "Gniazdo szybkiego ładowania",
+        "state": {
+          "disconnected": "Odłączone",
+          "connected": "Podłączone",
+          "connected_fast": "Podłączone (szybkie ładowanie)",
+          "unknown_code": "Nieznany kod"
+        }
       },
       "pressione_gomma_ant_dx": {
         "name": "Ciśnienie opony przód prawy"
@@ -426,13 +432,25 @@
         "name": "Ciśnienie opony tył lewy"
       },
       "ricarica_programmata_stato": {
-        "name": "Stan ładowania programowanego"
+        "name": "Stan ładowania programowanego",
+        "state": {
+          "off": "Wyłączony",
+          "on": "Włączony",
+          "running": "W trakcie",
+          "unknown_code": "Nieznany kod"
+        }
       },
       "riscaldamento_sedile_post_centrale": {
         "name": "Ogrzewanie środkowego fotela tylnego"
       },
       "stato_ricarica": {
-        "name": "Stan ładowania"
+        "name": "Stan ładowania",
+        "state": {
+          "not_charging": "Nie ładuje",
+          "charging": "Ładowanie",
+          "complete": "Naładowane",
+          "unknown_code": "Nieznany kod"
+        }
       },
       "stato_sessione": {
         "name": "Stan sesji"
